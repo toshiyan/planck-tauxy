@@ -35,25 +35,37 @@ def reduc_map(dtype,fmap,TK=2.726,field=0,scale=1.):
     return rmap * scale / TK
 
 
-def map2alm(lmax,fmap,falm,mask,ibl,dtype,scale=1.,**kwargs):
+def map2alm(lmax,fmap,falm,mask,ibl,dtype,scale=1.,tmap=None,**kwargs):
 
     if misctools.check_path(falm,**kwargs): return
     
-    hpmap = reduc_map(dtype,fmap,scale=scale)
-    nside = hp.pixelfunc.get_nside(hpmap)
-    hpmap *= mask
+    if tmap is None:
+        # standard map -> alm conversion
 
-    #pixel function
-    #if pwind:
-    #    pfunc = hp.sphtfunc.pixwin(nside)[:lmax+1]
-    #else:
-    #    pfunc = np.ones(lmax+1)
+        hpmap = reduc_map(dtype,fmap,scale=scale)
+        nside = hp.pixelfunc.get_nside(hpmap)
+        hpmap *= mask
+
+        #pixel function
+        #if pwind:
+        #    pfunc = hp.sphtfunc.pixwin(nside)[:lmax+1]
+        #else:
+        #    pfunc = np.ones(lmax+1)
     
-    # convert to alm
-    alm = curvedsky.utils.hp_map2alm(nside,lmax,lmax,hpmap)
+        # convert to alm
+        alm = curvedsky.utils.hp_map2alm(nside,lmax,lmax,hpmap)
 
-    # beam deconvolution
-    alm *= ibl[:,None]#/pfunc[:,None]
+        # beam deconvolution
+        alm *= ibl[:,None]#/pfunc[:,None]
+
+    else:
+        # deconvolve beam first
+        hpmap = reduc_map(dtype,fmap,scale=scale)
+        nside = hp.pixelfunc.get_nside(hpmap)
+        alm = curvedsky.utils.hp_map2alm(nside,lmax,lmax,hpmap)
+        alm *= ibl[:,None]
+        # input signal amplitude modulation
+        alm = curvedsky.utils.mulwin(nside,lmax,lmax,alm,mask*np.exp(-tmap))
     
     # save to file
     pickle.dump((alm),open(falm,"wb"),protocol=pickle.HIGHEST_PROTOCOL)
@@ -71,35 +83,27 @@ def map2alm_all(rlz,lmax,fmap,falm,wind,fbeam,dtype,sscale=1.,nscale=1.,ftalm=No
         if i == 0:
             map2alm(lmax,fmap['s'][i],falm['s']['T'][i],wind,ibl,dtype,**kwargs)
         else:
-            if ftalm is None:  
-                mwind = wind
+            if ftalm is None:
+                tmap = None
             else:
-                mwind = mul_tau(wind,ftalm[i])
-            map2alm(lmax,fmap['s'][i],falm['s']['T'][i],mwind,ibl,dtype,scale=sscale,**kwargs)
+                nside = hp.pixelfunc.get_nside(wind)
+                talm = pickle.load(open(ftalm[i],"rb"))
+                tmap = curvedsky.utils.hp_alm2map(nside,lmax,lmax,talm)
+            map2alm(lmax,fmap['s'][i],falm['s']['T'][i],wind,ibl,dtype,scale=sscale,tmap=tmap,**kwargs)
             map2alm(lmax,fmap['n'][i],falm['n']['T'][i],wind,ibl,dtype,scale=nscale,**kwargs)
 
 
-def gen_tau(rlz,tval,lmax,ftalm,Lc=2000.,overwrite=False,verbose=True):
+def gen_tau(rlz,lmax,ftalm,**kwargs_ov):
     
     for i in rlz:
         
-        if misctools.check_path(ftalm[i],overwrite=overwrite,verbose=verbose): continue
+        if misctools.check_path(ftalm[i],**kwargs_ov): continue
         
         if i==0: continue
 
-        l   = np.linspace(0,lmax,lmax+1)
-        tt  = (tval*1e-4)*4.*np.pi/Lc**2*np.exp(-(l/Lc)**2)
+        tt  = prjlib.tau_spec(lmax)
         alm = curvedsky.utils.gauss1alm(lmax,tt)
         pickle.dump((alm),open(ftalm[i],"wb"),protocol=pickle.HIGHEST_PROTOCOL)
-
-
-def mul_tau(imap,ftalm):
-
-    nside = hp.pixelfunc.get_nside(imap)
-    talm = pickle.load(open(ftalm,"rb"))
-    lmax = len(talm[:,0]) - 1
-    tmap = curvedsky.utils.hp_alm2map(nside,lmax,lmax,talm)
-    return imap*np.exp(-tmap)
 
 
 def alm_comb(rlz,falm,overwrite=False,verbose=True):
@@ -119,32 +123,9 @@ def alm_comb(rlz,falm,overwrite=False,verbose=True):
             plm = 0.*alm
 
         pickle.dump((alm+nlm+plm),open(falm['c']['T'][i],"wb"),protocol=pickle.HIGHEST_PROTOCOL)
-        pickle.dump((alm+nlm),open(falm['o']['T'][i],"wb"),protocol=pickle.HIGHEST_PROTOCOL)
 
 
-# obtain nij from simulation
-def nij(rlz,dtype,M,fmap,fnij,lmin,lmax,nscale,nside,**kwargs):
-
-    #nside = hp.pixelfunc.get_nside(M)
-    npix  = 12*nside**2
-    snmax = max(rlz)
-    print(snmax)
-
-    if misctools.check_path(fnij,**kwargs):
-        Nij = pickle.load(open(fnij,"rb"))
-    else:
-        Nij = np.zeros((1,1,npix))
-        sigma = 0.
-        for i in range(1,snmax+1):
-            Tnmap = M * reduc_map(dtype,fmap['n'][i],scale=nscale,nside=nside)
-            sigma += Tnmap**2 / (1.*snmax)
-        Nij[0,0,:] = M/(sigma+1e-40)*(lmax-lmin)*(lmin+lmax+2.)/(4*np.pi)
-        pickle.dump((Nij),open(fnij,"wb"),protocol=pickle.HIGHEST_PROTOCOL)
-
-    return Nij
-
-
-def wiener_cinv_core(i,dtype,M,cl,bl,Nij,fmap,falm,sscale,nscale,tval,ftalm,**kwargs):
+def wiener_cinv_core(i,dtype,M,cl,bl,Nij,fmap,falm,sscale,nscale,ftalm,**kwargs):
 
     lmax  = len(cl[0,:]) - 1
     
@@ -156,10 +137,21 @@ def wiener_cinv_core(i,dtype,M,cl,bl,Nij,fmap,falm,sscale,nscale,tval,ftalm,**kw
     if i==0: 
         T[0,0,:] = M * reduc_map(dtype,fmap['s'][i])
     else:
-        Ts = M * reduc_map(dtype,fmap['s'][i],scale=sscale)
-        if tval!=0. and i!=0:  Ts = mul_tau(Ts,ftalm[i])
+        # signal
+        Ts = reduc_map(dtype,fmap['s'][i],scale=sscale)
+        if ftalm is None:
+            Ts *= M
+        else:
+            talm = pickle.load(open(ftalm[i],"rb"))
+            tmap = curvedsky.utils.hp_alm2map(nside,lmax,lmax,talm)
+            alm = curvedsky.utils.hp_map2alm(nside,lmax,lmax,Ts) / bl[:,None]
+            alm = curvedsky.utils.mulwin(nside,lmax,lmax,alm,np.exp(-tmap)) # add tau effect
+            Ts = M * curvedsky.utils.hp_alm2map(nside,lmax,lmax,alm*bl[:,None])
+        
+        # noise, ptsr
         Tn = M * reduc_map(dtype,fmap['n'][i],scale=nscale)
         Tp = M * reduc_map(dtype,fmap['p'][i].replace('a0.0deg','a1.0deg'),TK=1.) # approximately use 1.0deg apodization case
+
         T[0,0,:] = Ts + Tn + Tp
 
     # cinv
@@ -169,23 +161,23 @@ def wiener_cinv_core(i,dtype,M,cl,bl,Nij,fmap,falm,sscale,nscale,tval,ftalm,**kw
 
 
 
-def wiener_cinv(rlz,dtype,M,cl,fbeam,fnij,fmap,falm,sscale,nscale,tval,ftalm,kwargs_ov={},kwargs_cinv={}):
+def wiener_cinv(rlz,dtype,M,cl,fbeam,fnij,fmap,falm,sscale,nscale,ftalm=None,kwargs_ov={},kwargs_cinv={}):
 
     lmin = 1
     lmax = len(cl[0,:]) - 1
 
     bl  = np.reshape(np.loadtxt(fbeam)[:lmax+1],(1,lmax+1))
-    #Nij = nij(rlz,dtype,M,fmap,fnij,lmin,lmax,nscale,nside,**kwargs_ov)
     Nij = M * (30.*(np.pi/10800.)/2.726e6)**(-2)
     Nij = np.reshape(Nij,(1,1,len(M)))
 
     for i in rlz:
         
-        if i==0: continue
+        if ftalm is not None and i==0: continue  # avoid real tau case
+
         if misctools.check_path(falm[i],**kwargs_ov): continue
         if kwargs_ov.get('verbose'):  misctools.progress(i,rlz,text='Current progress',addtext='(wiener_cinv)')
 
-        wiener_cinv_core(i,dtype,M,cl,bl,Nij,fmap,falm,sscale,nscale,tval,ftalm,**kwargs_cinv)
+        wiener_cinv_core(i,dtype,M,cl,bl,Nij,fmap,falm,sscale,nscale,ftalm=ftalm,**kwargs_cinv)
 
 
 
@@ -218,38 +210,13 @@ def alm2aps(rlz,lmax,fcmb,w2,stype=['s','n','p','c'],overwrite=False,verbose=Tru
     # save to files
     if rlz[-1] >= 2:
         if verbose:  print('save sim')
-        i0 = max(1,rlz[0])
+        i0 = max(0,1-rlz[0])
         np.savetxt(fcmb.scl,np.concatenate((eL[None,:],np.mean(cls[i0:,:,:],axis=0),np.std(cls[i0:,:,:],axis=0))).T)
 
     if rlz[0] == 0:
         if verbose:  print('save real')
         np.savetxt(fcmb.ocl,np.array((eL,cls[0,0,:])).T)
 
-
-def apsxfull(rlz,lmax,fcinv,ffull,w2,overwrite=False,verbose=True):  # compute xaps for cinv
-
-    if misctools.check_path(fcinv.xcl,overwrite=overwrite,verbose=verbose):  return
-
-    srlz = rlz.copy()
-    if min(rlz)==0:  srlz = srlz[1:]
-
-    eL  = np.linspace(0,lmax,lmax+1)
-    cls = np.zeros((len(srlz),1,lmax+1))
-
-    for i in srlz:
-
-        if verbose:  misctools.progress(i,srlz,text='Current progress',addtext='(xaps cmb for cinv)')
-
-        oalm0 = pickle.load(open(fcinv.alms['c']['T'][i],"rb"))
-        oalm1 = pickle.load(open(ffull.alms['s']['T'][i],"rb"))
-
-        #compute cls
-        ii = i - min(srlz)
-        cls[ii,0,:] = curvedsky.utils.alm2cl(lmax,oalm0,oalm1) / w2
-
-    # save to files
-    if verbose:  print('save sim')
-    np.savetxt(fcinv.xcl,np.concatenate((eL[None,:],np.mean(cls,axis=0),np.std(cls,axis=0))).T)
 
 
 def gen_ptsr(rlz,fcmb,fbeam,fseed,fcl,fmap,w,lmin=1000,overwrite=False,verbose=True): # generating ptsr contributions
@@ -295,7 +262,6 @@ def gen_ptsr(rlz,fcmb,fbeam,fseed,fcl,fmap,w,lmin=1000,overwrite=False,verbose=T
         hp.fitsfunc.write_map(fmap['p'][i],pmap,overwrite=True)
         
         palm = curvedsky.utils.hp_map2alm(nside,lmax,lmax,w*pmap) #multiply window
-        #palm /= (bl[:,None]*pfunc[:,None])  #beam deconvolution
         palm /= bl[:,None]  #beam deconvolution
         pickle.dump((palm),open(fcmb.alms['p']['T'][i],"wb"),protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -313,36 +279,40 @@ def interface(run=[],kwargs_cmb={},kwargs_ov={},kwargs_cinv={}):
     if p.dtype in ['dr2_nilc','dr2_smica','dr3_nilc','dr3_smica']:
         get_beam(p.fimap['s'][0],p.fbeam,p.lmax)
 
-    if 'tausim' in run and p.tval!=0.:
-        gen_tau(p.rlz,p.tval,p.lmax,p.ftalm)
-        map2alm_all(p.rlz,p.lmax,p.fimap,p.fcmb.alms,w,p.fbeam,p.dtype,p.sscale,p.nscale,ftalm=p.ftalm,**kwargs_ov)
+    if 'tausim' in run and p.tausig:
+        # generate tau alm and save to ftalm file
+        gen_tau(p.rlz,p.lmax,p.ftalm,**kwargs_ov)
     
-    if p.fltr == 'none':
-    
-        if 'ptsr' in run:  # generate ptsr
-            map2alm_all(p.rlz,p.lmax,p.fimap,p.fcmb.alms,w,p.fbeam,p.dtype,p.sscale,p.nscale,**kwargs_ov)
-            alm2aps(p.rlz,p.lmax,p.fcmb,wn[2],stype=['s','n'],**kwargs_ov)
-            gen_ptsr(p.rlz,p.fcmb,p.fbeam,p.fpseed,p.fptsrcl,p.fimap,w,**kwargs_ov) # generate map and alm from above computed aps
+    if 'ptsr' in run and not p.tausig:  # generate ptsr
+        # compute signal and noise alms
+        map2alm_all(p.rlz,p.lmax,p.fimap,p.fcmb.alms,w,p.fbeam,p.dtype,p.sscale,p.nscale,**kwargs_ov)
+        # compute signal and noise spectra but need to change file names
+        q = prjlib.init_analysis(**kwargs_cmb)
+        q.fcmb.scl = q.fcmb.scl.replace('.dat','_tmp.dat')
+        q.fcmb.ocl = q.fcmb.ocl.replace('.dat','_tmp.dat')
+        alm2aps(p.rlz,p.lmax,q.fcmb,wn[2],stype=['s','n'],**kwargs_ov)
+        # generate ptsr alm from obs - (sig+noi) spectrum
+        gen_ptsr(p.rlz,q.fcmb,p.fbeam,p.fpseed,p.fptsrcl,p.fimap,w,**kwargs_ov) # generate map and alm from above computed aps
 
+    if p.fltr == 'none':  # use normal transform to alm
+    
         if 'alm' in run:  # combine signal, noise and ptsr
+            if p.tausig:
+                # modify signal alm to include tau effect
+                map2alm_all(p.rlz,p.lmax,p.fimap,p.fcmb.alms,w,p.fbeam,p.dtype,p.sscale,p.nscale,ftalm=p.ftalm,**kwargs_ov)
+            # combine signal, noise and ptsr alms 
             alm_comb(p.rlz,p.fcmb.alms,**kwargs_ov)
 
         if 'aps' in run:  # compute cl
-            alm2aps(p.rlz,p.lmax,p.fcmb,wn[2],**kwargs_ov)
+            alm2aps(p.rlz,p.lmax,p.fcmb,wn[2],overwrite=True,verbose=kwargs_ov['verbose'])
 
-    if p.fltr == 'cinv':
+    if p.fltr == 'cinv':  # cinv filtering
     
-        if 'alm' in run:  # cinv filtering
-            wiener_cinv(p.rlz,p.dtype,M,p.lcl[0:1,:p.lmax+1],p.fbeam,p.fcmb.fnij,p.fimap,p.fcmb.alms['c']['T'],p.sscale,p.nscale,p.tval,p.ftalm,kwargs_ov=kwargs_ov,kwargs_cinv=kwargs_cinv)
+        if 'alm' in run:  # cinv filtering here
+            wiener_cinv(p.rlz,p.dtype,M,p.lcl[0:1,:p.lmax+1],p.fbeam,p.fcmb.fnij,p.fimap,p.fcmb.alms['c']['T'],p.sscale,p.nscale,ftalm=p.ftalm,kwargs_ov=kwargs_ov,kwargs_cinv=kwargs_cinv)
 
-        if 'aps' in run:
+        if 'aps' in run:  # aps of filtered spectrum
             p.fcmb.alms['s']['T'] = p.fcmb.alms['c']['T']
             alm2aps(p.rlz,p.lmax,p.fcmb,wn[0],stype=['s','c'],**kwargs_ov)
     
-    # cross with unmasked alm
-    #if 'xaps' in run:  
-    #    kwargs_cmb['wtype'] = 'Fullsky'
-    #    pid = prjlib.init_analysis(**kwargs_cmb) # fullsky no mask
-    #    map2alm_all(p.rlz,p.lmax,p.fimap,pid.fcmb.alms,1.,p.fbeam,p.dtype,nside=nside,**kwargs_ov)
-    #    apsxfull(p.rlz,p.lmax,p.fcmb,pid.fcmb,wn[1],**kwargs_ov)
 

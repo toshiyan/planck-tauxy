@@ -15,16 +15,33 @@ import misctools
 import prjlib
 
 
-def aps(rlz,qobj,fklm=None,q='TT',overwrite=False,verbose=True):
+def init_quad(ids,stag,**kwargs):
 
-    if misctools.check_path(qobj.f[q].ocls,overwrite=overwrite,verbose=verbose):  return
+    # setup parameters for lensing reconstruction (see cmblensplus/utils/quad_func.py)
+    qtau = quad_func.quad(qlist=['TT'],qtype='tau',**kwargs)
+    qlen = quad_func.quad(qlist=['TT'],qtype='lens',**kwargs)
+    qsrc = quad_func.quad(qlist=['TT'],qtype='src',**kwargs)
+    qtbh = quad_func.quad(qlist=['TT'],qtype='tau',**kwargs)
+    qtBH = quad_func.quad(qlist=['TT'],qtype='tau',**kwargs)
 
-    cl = np.zeros((len(rlz),3,qobj.olmax+1))
+    d = prjlib.data_directory()
+
+    quad_func.quad.fname(qtau,d['root'],ids,stag)
+    quad_func.quad.fname(qlen,d['root'],ids,stag)
+    quad_func.quad.fname(qsrc,d['root'],ids,stag)
+    quad_func.quad.fname(qtbh,d['root'],ids,'bh_'+stag)
+    quad_func.quad.fname(qtBH,d['root'],ids,'BH_'+stag)
+
+    return qtau, qlen, qsrc, qtbh, qtBH
+
+
+
+def aps(rlz,qobj,fklm=None,q='TT',**kwargs_ov):
 
     for i in rlz:
         
         if misctools.check_path(qobj.f[q].cl[i],**kwargs_ov): continue
-        if verbose:  misctools.progress(i,rlz,text='Current progress',addtext='(qrec aps)')
+        if kwargs_ov['verbose']:  misctools.progress(i,rlz,text='Current progress',addtext='(qrec aps)')
         
         # load qlm
         alm = pickle.load(open(qobj.f[q].alm[i],"rb"))[0]
@@ -36,8 +53,8 @@ def aps(rlz,qobj,fklm=None,q='TT',overwrite=False,verbose=True):
             alm = -alm
         
         # auto spectrum
-        ii = i - min(rlz)
-        cl[ii,0,:] = curvedsky.utils.alm2cl(qobj.olmax,alm)/qobj.wn[4]
+        cl = np.zeros((3,qobj.olmax+1))
+        cl[0,:] = curvedsky.utils.alm2cl(qobj.olmax,alm)/qobj.wn[4]
 
         if fklm is not None and i>0:
             # load input klm
@@ -46,33 +63,24 @@ def aps(rlz,qobj,fklm=None,q='TT',overwrite=False,verbose=True):
                 iklm = curvedsky.utils.lm_healpy2healpix(len(iKlm),iKlm,2048)        
             if qobj.qtype == 'tau':
                 iklm = pickle.load(open(fklm[i],"rb"))
+            if qobj.qtype == 'src':
+                iklm = 0.*alm
             # cross with input
-            cl[ii,1,:] = curvedsky.utils.alm2cl(qobj.olmax,alm,iklm)/qobj.wn[2]
+            cl[1,:] = curvedsky.utils.alm2cl(qobj.olmax,alm,iklm)/qobj.wn[2]
             # input
-            cl[ii,2,:] = curvedsky.utils.alm2cl(qobj.olmax,iklm)
+            cl[2,:] = curvedsky.utils.alm2cl(qobj.olmax,iklm)
 
-        np.savetxt(qobj.f[q].cl[i],np.concatenate((qobj.l[None,:],cl[ii,:,:])).T)
-
-    # save to file
-    if rlz[-1] >= 2:
-        print('save sim') 
-        i0 = max(0,1-min(rlz))
-        np.savetxt(qobj.f[q].mcls,np.concatenate((qobj.l[None,:],np.mean(cl[i0:,:,:],axis=0),np.std(cl[i0:,:,:],axis=0))).T)
+        np.savetxt(qobj.f[q].cl[i],np.concatenate((qobj.l[None,:],cl)).T)
 
 
-
-def qrec_bh_tau(qtau,qlen,qtbh,rlz,q='TT',**kwargs_ov):
+def qrec_bh_tau(qtau,qlen,qsrc,qtbh,rlz,q='TT',est=['lens','tau','src'],**kwargs_ov):
 
     At = np.loadtxt(qtau.f[q].al,unpack=True)[1]
-    Ag = np.loadtxt(qlen.f[q].al,unpack=True)[1]
 
     # calculate response function
+    Btt, Btg, Bts = quad_func.quad.coeff_bhe(qtau,est=est,qcomb=q,gtype='k')
     if not misctools.check_path(qtbh.f[q].al,**kwargs_ov):
-
-        Rtl = curvedsky.norm_lens.ttt(qtau.olmax,qtau.rlmin,qtau.rlmax,qtau.lcl[0,:qtau.rlmax+1],qtau.ocl[0,:qtau.rlmax+1],gtype='k')
-        Il = 1./(1.-At*Ag*Rtl**2)
-        np.savetxt(qtbh.f[q].al,np.array((qtau.l,At*Il,At)).T)
-    
+        np.savetxt(qtbh.f[q].al,np.array((qtau.l,At*Btt,At)).T)
 
     # calculate bh-estimator 
     for i in rlz:
@@ -82,8 +90,12 @@ def qrec_bh_tau(qtau,qlen,qtbh,rlz,q='TT',**kwargs_ov):
 
         tlm = pickle.load(open(qtau.f[q].alm[i],"rb"))[0]
         glm = pickle.load(open(qlen.f[q].alm[i],"rb"))[0]
-        alm = ( tlm - At[:,None]*Rtl[:,None]*glm ) * Il[:,None]
-        
+        if 'src' in est: 
+            slm = pickle.load(open(qsrc.f[q].alm[i],"rb"))[0]
+        else:
+            slm = 0.*glm
+
+        alm = Btt[:,None]*tlm + Btg[:,None]*glm + Bts[:,None]*slm
         pickle.dump((alm,alm*0.),open(qtbh.f[q].alm[i],"wb"),protocol=pickle.HIGHEST_PROTOCOL)
 
     quad_func.quad.mean_rlz(qtbh,rlz,**kwargs_ov)
@@ -117,7 +129,7 @@ def interface(qrun=['norm','qrec','n0','mean'],run=['tau','len','tbh'],kwargs_ov
         wn[:] = wn[0]
 
     # define objects
-    qtau, qlen, qtbh, qlbh = prjlib.init_quad(p.ids,p.stag,wn=wn,lcl=p.lcl,ocl=ocl,ifl=ifl,falm=p.fcmb.alms['c'],**kwargs_qrec)
+    qtau, qlen, qsrc, qtbh, qtBH = init_quad(p.ids,p.stag,wn=wn,lcl=p.lcl,ocl=ocl,ifl=ifl,falm=p.fcmb.alms['c'],**kwargs_qrec)
 
     # reconstruction
     if 'tau' in run:
@@ -128,8 +140,16 @@ def interface(qrun=['norm','qrec','n0','mean'],run=['tau','len','tbh'],kwargs_ov
         quad_func.qrec_flow(qlen,p.rlz,run=qrun,**kwargs_ov)  #lens rec
         if 'aps' in qrun:  aps(p.rlz,qlen,fklm=p.fiklm,**kwargs_ov)
 
+    if 'src' in run:
+        quad_func.qrec_flow(qsrc,p.rlz,run=qrun,**kwargs_ov)  #src rec
+        if 'aps' in qrun:  aps(p.rlz,qsrc,fklm=p.ftalm,**kwargs_ov)
+
     if 'tbh' in run:
-        qrec_bh_tau(qtau,qlen,qtbh,p.rlz,**kwargs_ov)  #BHE for tau
+        qrec_bh_tau(qtau,qlen,qsrc,qtbh,p.rlz,est=['lens','tau'],**kwargs_ov)  #BHE for tau
         if 'aps' in qrun:  aps(p.rlz,qtbh,fklm=p.ftalm,**kwargs_ov)
+
+    if 'tBH' in run:
+        qrec_bh_tau(qtau,qlen,qsrc,qtBH,p.rlz,est=['lens','tau','src'],**kwargs_ov)  #full BHE for tau
+        if 'aps' in qrun:  aps(p.rlz,qtBH,fklm=p.ftalm,**kwargs_ov)
 
 

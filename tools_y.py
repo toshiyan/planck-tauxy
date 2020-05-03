@@ -2,6 +2,7 @@
 import numpy as np
 import healpy as hp
 import pickle
+import tqdm
 
 # from cmblensplus/wrap
 import curvedsky
@@ -14,83 +15,198 @@ import cmb as CMB
 
 # local
 import prjlib
+import tools_qrec
 
 
-def ymap2yalm(cy,Wy,rlz,lmax,w2):
+class compy():  # compton y
+
+    def __init__(self,ytype='milca',masktype=0,ascale=1.0,tausig=False):
+
+        conf = misctools.load_config('COMPY')
+
+        # compsep type
+        self.ytype = conf.get('ytype',ytype)
+
+        # y mask
+        self.masktype = conf.getint('masktype',masktype)
+        self.ymask    = 'M'+str(self.masktype+1)
+        self.ascale   = ascale
+
+        # sim
+        self.tausig = tausig
+
+        # tag
+        self.ytag = self.ytype+'_'+self.ymask+'_a'+str(self.ascale)+'deg'
+
+
+    def filename(self,ids):
+
+        d = prjlib.data_directory()
+        
+        # original mask file for ymap
+        self.fmask_org = d['ysz'] + 'pub/COM_CompMap_Compton-SZMap-masks_2048_R2.01.fits'
+
+        # reduced mask (multiplied ptsr mask and costheta mask)
+        self.fmask  = d['ysz'] + 'pub/ymask.fits'
+        self.famask = d['ysz'] + 'pub/ymask_a'+str(self.ascale)+'deg.fits'
+        if self.ascale == 0.0:  self.famask = self.fmask
+
+        # ymap
+        self.fymap  = d['ysz'] + 'pub/COM_CompMap_YSZ_R2.01/'+self.ytype+'_ymaps.fits'
+
+        # yalm
+        ttag = ''
+        if self.tausig: ttag = '_tausig'
+        self.fyalm  = [d['ysz'] + 'alm/'+self.ytype+'_'+self.ymask+ttag+'_'+x+'.pkl' for x in ids]
+
+        # real clyy
+        self.fclyy  = d['ysz'] + 'aps/'+self.ytype+'_'+self.ymask+'.dat'
+
+
+
+class xspec():
+
+    def __init__(self,qtag,ytag,ids):
+
+        d = prjlib.data_directory()
+        xaps = d['xcor'] + '/aps/'
+        
+        xtag = qtag + '_' + ytag
+
+        self.xl  = [xaps+'/rlz/xl_'+xtag+'_'+x+'.dat' for x in ids]
+
+
+
+def init_compy(ids,**kwargs):
+
+    d = prjlib.data_directory()
+    
+    cy = compy(**kwargs)
+    compy.filename(cy,ids)
+    
+    return cy
+
+
+
+def init_cross(qobj,cy,ids,stag,q='TT'):
+
+    ltag = '_l'+str(qobj.rlmin)+'-'+str(qobj.rlmax)
+    xobj = xspec(q+'_'+qobj.qtype+'_'+stag+ltag,cy.ytag,ids)
+    return xobj
+
+
+def ymap2yalm(cy,Wy,rlz,lmax,w2,ftalm):
 
     nside = hp.pixelfunc.get_nside(Wy)
     l = np.linspace(0,lmax,lmax+1)
+    bl = CMB.beam(10.,lmax)
 
-    for i in rlz:
+    pbar = tqdm.tqdm(rlz,ncols=100)
+    for i in pbar:
+        pbar.set_description('ymap2alm')
 
-        misctools.progress(i,rlz,text='Current progress',addtext='(ymap2alm)')
         yalm = {}
         clyy = {}
 
         for yn in [0,1,2]: #full, first, last
         
             if i==0: # real data
-                bl = CMB.beam(10.,lmax)
-                ymap = Wy * hp.fitsfunc.read_map(cy.fymap,field=yn)
+
+                ymap = Wy * hp.fitsfunc.read_map(cy.fymap,field=yn,verbose=False)
                 yalm[yn] = curvedsky.utils.hp_map2alm(nside,lmax,lmax,ymap) * bl[:,None]
                 clyy[yn] = curvedsky.utils.alm2cl(lmax,yalm[yn])/w2
+
             else: # generate sim
-                clyy[yn] = np.loadtxt(cy.fclyy,unpack=True)[yn-1]
-                galm = curvedsky.utils.gauss1alm(lmax,clyy[yn][:lmax+1])
+
+                clyy[yn] = np.loadtxt(cy.fclyy,unpack=True)[yn+1]
+                if ftalm is None:
+                    galm = curvedsky.utils.gauss1alm(lmax,clyy[yn][:lmax+1])
+                else:
+                    talm = pickle.load(open(ftalm[i],"rb"))
+                    cltt = prjlib.tau_spec(lmax)
+                    clty = np.sqrt(cltt*clyy[yn])*.9
+                    __, galm = curvedsky.utils.gauss2alm(lmax,cltt,clyy[yn],clty,flm=talm)
                 ymap = Wy * curvedsky.utils.hp_alm2map(nside,lmax,lmax,galm)
                 yalm[yn] = curvedsky.utils.hp_map2alm(nside,lmax,lmax,ymap)
 
         if i == 0:
             xlyy = curvedsky.utils.alm2cl(lmax,yalm[1],yalm[2])/w2
             np.savetxt(cy.fclyy,np.array((l,clyy[0],clyy[1],clyy[2],xlyy)).T)
+
         pickle.dump((yalm[0],yalm[1],yalm[2]),open(cy.fyalm[i],"wb"),protocol=pickle.HIGHEST_PROTOCOL)
 
 
 
-def tauxy(cy,lmax,bn,rlz,qf,fx,w0,w1,**kwargs_ov):
+def quadxy(cy,lmax,rlz,qobj,fx,w3,w2,**kwargs_ov):
 
-    __, bc = basic.aps.binning(bn,[1,lmax],'')
     l = np.linspace(0,lmax,lmax+1)
-    
-    xl = np.zeros((len(rlz),3,lmax+1))
-    xb = np.zeros((len(rlz),3,bn))
 
     for i in rlz:
 
         print(i)
 
         # load tau
-        tlm = pickle.load(open(qf['TT'].alm[i],"rb"))[0][:lmax+1,:lmax+1]
-        mf  = pickle.load(open(qf['TT'].mfb[i],"rb"))[0][:lmax+1,:lmax+1]
+        tlm = pickle.load(open(qobj.f['TT'].alm[i],"rb"))[0][:lmax+1,:lmax+1]
+        mf  = pickle.load(open(qobj.f['TT'].mfb[i],"rb"))[0][:lmax+1,:lmax+1]
         tlm -= mf
-        tlm = -tlm
+        if qobj.qtype=='tau':  tlm = -tlm  
             
         # load yalm
         ylm = {}
         ylm[0], ylm[1], ylm[2] = pickle.load(open(cy.fyalm[i],"rb"))
 
         # cross spectra
+        xl = np.zeros((3,lmax+1))
         for yn in range(3):
-            xl[i,yn,:] = curvedsky.utils.alm2cl(lmax,tlm,ylm[yn][:lmax+1,:lmax+1])/w0
-            xb[i,yn,:] = basic.aps.cl2bcl(bn,lmax,xl[i,yn,:])
-        np.savetxt(fx.xl[i],np.concatenate((bc[None,:],xb[i,:,:])).T)
+            xl[yn,:] = curvedsky.utils.alm2cl(lmax,tlm,ylm[yn][:lmax+1,:lmax+1])/w3
 
-    # save to file
-    if rlz[-1] >= 2:
-        print('save sim') 
-        np.savetxt(fx.mxls,np.concatenate((l[None,:],np.mean(xl[1:,:,:],axis=0),np.std(xl[1:,:,:],axis=0))).T)
-        np.savetxt(fx.mxbs,np.concatenate((bc[None,:],np.mean(xb[1:,:,:],axis=0),np.std(xb[1:,:,:],axis=0))).T)
-        cov = np.cov(xb[1:,0,:],rowvar=0)
-        np.savetxt(fx.xcov,cov)
-
-    if rlz[0] == 0:
-        print('save real')
-        np.savetxt(fx.oxls,np.concatenate((l[None,:],xl[0,:,:],np.std(xl[1:,:,:],axis=0))).T)
-        np.savetxt(fx.oxbs,np.concatenate((bc[None,:],xb[0,:,:],np.std(xb[1:,:,:],axis=0))).T)
+        np.savetxt(fx.xl[i],np.concatenate((l[None,:],xl)).T)
 
 
+def ydeproj(cy,lmax,rlz,qtbh,qlen,fx,w3,wlk,**kwargs_ov):
 
-def interface(run=['yalm','tauxy'],kwargs_ov={},kwargs_cmb={},kwargs_qrec={},ep=1e-30):
+    l  = np.linspace(0,lmax,lmax+1)    
+    xl = np.zeros((len(rlz),3,lmax+1))
+
+    for i in rlz:
+
+        print(i)
+
+        # load tau
+        tlm = pickle.load(open(qtbh.f['TT'].alm[i],"rb"))[0][:lmax+1,:lmax+1]
+        tmf = pickle.load(open(qtbh.f['TT'].mfb[i],"rb"))[0][:lmax+1,:lmax+1]
+        plm = pickle.load(open(qlen.f['TT'].alm[i],"rb"))[0][:lmax+1,:lmax+1]
+        pmf = pickle.load(open(qlen.f['TT'].mfb[i],"rb"))[0][:lmax+1,:lmax+1]
+        plm -= pmf
+        tlm -= tmf
+        tlm = -tlm
+            
+        # load yalm
+        ylm = {}
+        ylm[0], ylm[1], ylm[2] = pickle.load(open(cy.fyalm[i],"rb"))
+
+        # deprojected cross spectrum
+        for yn in range(3):
+            dylm = ylm[yn][:lmax+1,:lmax+1] - wlk[:lmax+1,None]*plm
+            xl[i,yn,:] = curvedsky.utils.alm2cl(lmax,tlm,dylm)/w3
+
+        np.savetxt(fx.dl[i],np.concatenate((l[None,:],xl[i,:,:])).T)
+
+
+def theta_mask(nside,theta):
+
+    mask = -curvedsky.utils.cosin_healpix(nside)
+    v    = np.cos((90.-theta)*np.pi/180.)
+    
+    print(v)
+    
+    mask[mask>=-v] = 1.
+    mask[mask<=-v] = 0.
+    
+    return mask
+
+
+def interface(run=['yalm','tauxy'],kwargs_ov={},kwargs_cmb={},kwargs_qrec={},kwargs_y={},ep=1e-30):
     
     p = prjlib.init_analysis(**kwargs_cmb)
     W, M, wn = prjlib.set_mask(p.famask)
@@ -103,38 +219,45 @@ def interface(run=['yalm','tauxy'],kwargs_ov={},kwargs_cmb={},kwargs_qrec={},ep=
         Wt = M
 
     # define objects
-    qtau, qlen, qtbh, qlbh = prjlib.init_quad(p.ids,p.stag,**kwargs_qrec)
+    qtau, qlen, qsrc, qtbh, qtBH = tools_qrec.init_quad(p.ids,p.stag,**kwargs_qrec)
 
-    if 'yalm' in run:
-
-        for ytype in ['nilc','milca']:
-
-            for masktype in range(5):
+    cy = init_compy(p.ids,**kwargs_y)
+        
+    Wy = hp.fitsfunc.read_map(cy.famask,field=cy.masktype,verbose=False)
+    w2 = np.average(Wy**2)
+    w3 = np.average(Wy*Wt**2)
     
-                cy = prjlib.init_compy(p.ids,masktype=masktype,ytype=ytype)
-                #Wy = hp.fitsfunc.read_map(cy.fymask,field=cy.masktype)
-                Wy = hp.fitsfunc.read_map(cy.faymask,field=cy.masktype)
-                w2 = np.average(Wy**2)
-                ymap2yalm(cy,Wy,p.rlz,p.lmax,w2)
+    if 'yalm' in run:
+    
+        ymap2yalm(cy,Wy,p.rlz,p.lmax,w2,p.ftalm)
 
     if 'tauxy' in run:
 
-        for ytype in ['nilc','milca']:
-            
-            for masktype in range(5):
-        
-                cy = prjlib.init_compy(p.ids,masktype=masktype,ytype=ytype)
-                fxtau, fxtbh = prjlib.init_cross(qtau,qtbh,cy,p.ids,p.stag)
+        fxtau = init_cross(qtau,cy,p.ids,p.stag)
+        quadxy(cy,qtau.olmax,p.rlz,qtau,fxtau,w3,w2)
 
-                # normalization
-                #Wy = hp.fitsfunc.read_map(cy.fymask,field=cy.masktype)
-                Wy = hp.fitsfunc.read_map(cy.faymask,field=cy.masktype)
-                w0 = np.average(Wy*Wt**2)
-                w1 = np.average(Wy**2)
-                print('wind:',w0,w1)
+    if 'tbhxy' in run:
 
-                # xaps
-                tauxy(cy,qtau.olmax,p.bn,p.rlz,qtau.f,fxtau,w0,w1)
-                tauxy(cy,qtau.olmax,p.bn,p.rlz,qtbh.f,fxtbh,w0,w1)
+        fxtbh = init_cross(qtbh,cy,p.ids,'bh_'+p.stag)
+        quadxy(cy,qtbh.olmax,p.rlz,qtbh,fxtbh,w3,w2)
+
+    if 'tBHxy' in run:
+
+        fxtBH = init_cross(qtBH,cy,p.ids,'BH_'+p.stag)
+        quadxy(cy,qtBH.olmax,p.rlz,qtBH,fxtBH,w3,w2)
+
+    #if 'kapxy' in run:
+
+    #    fxlen, fxlbh = init_cross(qlen,qlbh,cy,p.ids,p.stag)
+    #    quadxy(cy,qlen.olmax,p.rlz,qlen,fxlen,w3,w2)
+
+    #if 'deproj' in run:
+    #    fxtau, fxtbh = init_cross(qtau,qtbh,cy,p.ids,p.stag)
+    #    fxlen, fxlbh = init_cross(qlen,qlbh,cy,p.ids,p.stag)
+    #    nlkk = np.loadtxt(qlen.f['TT'].al,unpack=True)[1]
+    #    clyk = 1e-10/np.linspace(0,p.lmax,p.lmax+1)
+    #    wlk = clyk[:p.lmax+1]/(p.ckk+nlkk[:p.lmax+1])
+    #    ydeproj(cy,qtbh.olmax,p.rlz,qtbh,qlen,fxtbh,w3,wlk,**kwargs_ov)
+
 
 

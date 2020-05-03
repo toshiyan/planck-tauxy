@@ -50,10 +50,10 @@ class cmb:
 
         # cmb signal/noise alms
         self.alms = {}
-        for s in ['s','n','p','c','o']:
+        for s in ['s','n','p','c']:
             self.alms[s] = {}
             if s in ['n','p']: tag = p.ntag
-            if s in ['s','c','o']: tag = p.stag
+            if s in ['s','c']: tag = p.stag
             for m in mtype:
                 self.alms[s][m] = [d_alm+'/'+s+'_'+m+'_'+tag+'_'+x+'.pkl' for x in p.ids]
 
@@ -65,57 +65,6 @@ class cmb:
         self.cl  = [d_aps+'/rlz/cl_'+p.stag+'_'+x+'.dat' for x in p.ids]
         self.xcl = d_aps+'aps_sim_1d_'+p.stag+'_cross.dat'
         self.ocl = d_aps+'aps_obs_1d_'+p.stag+'.dat'
-
-
-class compy():  # compton y
-
-    def __init__(self,masktype=0,ytype='nilc'):
-
-        conf = misctools.load_config('COMPY')
-
-        self.ytype = conf.get('ytype',ytype)
-
-        self.masktype = conf.getint('masktype',masktype)
-        self.ymask    = 'M'+str(self.masktype+1)
-
-
-    def filename(self,ids):
-
-        d = data_directory()
-        
-        # original mask file for ymap
-        self.fymask_org = d['ysz'] + 'pub/COM_CompMap_Compton-SZMap-masks_2048_R2.01.fits'
-
-        # reduced mask (multiplied ptsr mask and costheta mask)
-        self.fymask  = d['ysz'] + 'pub/ymask.fits'
-        self.faymask = d['ysz'] + 'pub/aymask.fits'
-
-        # ymap
-        self.fymap  = d['ysz'] + 'pub/COM_CompMap_YSZ_R2.01/'+self.ytype+'_ymaps.fits'
-
-        # yalm
-        self.fyalm  = [d['ysz'] + 'alm/'+self.ytype+'_'+self.ymask+'_'+x+'.pkl' for x in ids]
-        self.fclyy  = d['ysz'] + 'aps/'+self.ytype+'_'+self.ymask+'.dat'
-
-
-class xspec():
-
-    def __init__(self,qtag,ytag,otag,ids):
-
-        xtag = qtag + '_' + ytag
-
-        d = data_directory()
-        
-        xalm = d['xcor'] + '/alm/'
-        xaps = d['xcor'] + '/aps/'
-
-        self.xl   = [xalm+'xl_'+xtag+'_'+x+'.dat' for x in ids]
-
-        self.mxls = xaps+'xl_'+xtag+'.dat'
-        self.mxbs = xaps+'xl_'+xtag+otag+'.dat'
-        self.xcov = xaps+'cov_'+xtag+otag+'.dat'
-        self.oxls = xaps+'xl_obs_'+xtag+'.dat'
-        self.oxbs = xaps+'xl_obs_'+xtag+otag+'.dat'
 
 
 class xbispec():
@@ -134,7 +83,7 @@ class xbispec():
 #* Define parameters
 class analysis:
 
-    def __init__(self,snmin=0,snmax=100,dtype='dr2_smica',fltr='none',lmin=1,lmax=2048,olmin=1,olmax=2048,bn=30,wtype='Lmask',ascale=1.,tval=0.):
+    def __init__(self,snmin=0,snmax=100,dtype='dr2_smica',fltr='none',lmin=1,lmax=2048,olmin=1,olmax=2048,bn=30,wtype='Lmask',ascale=1.,tausig=False):
 
         #//// load config file ////#
         conf = misctools.load_config('CMB')
@@ -157,7 +106,7 @@ class analysis:
 
         # cmb map
         self.dtype  = conf.get('dtype',dtype)
-        self.tval   = conf.get('tval',tval)
+        self.tausig = conf.getboolean('tausig',tausig)
         self.fltr   = conf.get('fltr',fltr)
         if self.fltr == 'cinv':
             ascale = 0.
@@ -188,9 +137,8 @@ class analysis:
         #//// basic tags ////#
         # for alm
         apotag = 'a'+str(self.ascale)+'deg'
-        ttag = 't'+str(self.tval)
-        if self.tval!=0.: 
-            self.stag = '_'.join( [ self.dtype , self.wtype , apotag , self.fltr , ttag ] )
+        if self.tausig: 
+            self.stag = '_'.join( [ self.dtype , self.wtype , apotag , self.fltr , 'tausig' ] )
         else: 
             self.stag = '_'.join( [ self.dtype , self.wtype , apotag , self.fltr ] )
         self.ntag = '_'.join( [ self.dtype , self.wtype , apotag , self.fltr ] )
@@ -199,7 +147,7 @@ class analysis:
         self.otag = '_oL'+str(self.olmin)+'-'+str(self.olmax)+'_b'+str(self.bn)
 
         #//// index ////#
-        self.ids = [str(i).zfill(5) for i in range(-1,100)]
+        self.ids = [str(i).zfill(5) for i in range(-1,200)]
         self.ids[0] = 'real'  # change 1st index
         ids = self.ids
 
@@ -241,7 +189,10 @@ class analysis:
 
         # input klm realizations
         self.fiklm = [ d['inp'] + 'sky_klms/sim_'+x[1:]+'_klm.fits' for x in ids ]
-        self.ftalm = [ d['inp'] + 'sky_tlms/sim_t1.0_'+x[1:]+'_tlm.fits' for x in ids ]
+        if self.tausig:
+            self.ftalm = [ d['inp'] + 'sky_tlms/sim_tausig_'+x[1:]+'_tlm.fits' for x in ids ]
+        else:
+            self.ftalm = None
 
         # PLANCK DR3
         #if self.dtype in ['nilc','smica','nosz']:
@@ -310,6 +261,7 @@ class analysis:
         self.lcl *= 2.*np.pi / (self.l**2+self.l+1e-30)
         self.lcl[0:1,:] /= constants.Tcmb**2 
         self.cpp = self.lcl[4,:]
+        self.ckk = self.lcl[4,:] * (self.l**2+self.l)**2/4.
 
 
 
@@ -324,44 +276,6 @@ def init_analysis(**kwargs):
     analysis.array(p)
     analysis.set_mask_filename(p)
     return p
-
-
-def init_quad(ids,stag,**kwargs):
-    # setup parameters for lensing reconstruction (see cmblensplus/utils/quad_func.py)
-    qtau = quad_func.quad(qlist=['TT'],qtype='tau',**kwargs)
-    qlen = quad_func.quad(qlist=['TT'],qtype='lens',**kwargs)
-    qtbh = quad_func.quad(qlist=['TT'],qtype='tau',**kwargs)
-    qlbh = quad_func.quad(qlist=['TT'],qtype='lens',**kwargs)
-
-    d = data_directory()
-
-    quad_func.quad.fname(qtau,d['root'],ids,stag)
-    quad_func.quad.fname(qlen,d['root'],ids,stag)
-    quad_func.quad.fname(qtbh,d['root'],ids,'bh_'+stag)
-    quad_func.quad.fname(qlbh,d['root'],ids,'bh_'+stag)
-
-    return qtau, qlen, qtbh, qlbh
-
-
-def init_compy(ids,**kwargs):
-    d = data_directory()
-    cy = compy(**kwargs)
-    compy.filename(cy,ids)
-    return cy
-
-
-def init_cross(qtau,qtbh,cy,ids,stag,q='TT'):
-
-    # lrange
-    ltag = '_l'+str(qtau.rlmin)+'-'+str(qtau.rlmax)
-
-    # output multipole range
-    otag = '_oL'+str(qtau.olmin)+'-'+str(qtau.olmax)+'_b'+str(qtau.bn)
-
-    xtau = xspec(q+'_'+stag+ltag,cy.ytype+'_'+cy.ymask,otag,ids)
-    xtbh = xspec(q+'_bhlens_'+stag+ltag,cy.ytype+'_'+cy.ymask,otag,ids)
-
-    return xtau, xtbh
 
 
 def set_mask(fmask,wtype='',verbose=False):
@@ -397,20 +311,15 @@ def wfac(wtype,ascale):
 
 def make_HMLmask(p,overwrite=False):
 
-    mask0 = hp.fitsfunc.read_map(p.Lmask)
-    mask1 = hp.fitsfunc.read_map(p.Cmask,field=2)
+    mask0 = hp.fitsfunc.read_map(p.Lmask,verbose=False)
+    mask1 = hp.fitsfunc.read_map(p.Cmask,field=2,verbose=False)
     masks = mask0 * mask1
     
     hp.fitsfunc.write_map(p.fmask,masks,overwrite=overwrite)
 
 
-def theta_mask(nside,theta):
-    mask = -curvedsky.utils.cosin_healpix(nside)
-    v    = np.cos((90.-theta)*np.pi/180.)
-    print(v)
-    mask[mask>=-v] = 1.
-    mask[mask<=-v] = 0.
-    return mask
-
+def tau_spec(lmax,Lc=2000.):
+    l = np.linspace(0,lmax,lmax+1)
+    return  (1e-3)*4.*np.pi/Lc**2*np.exp(-(l/Lc)**2)
 
 
