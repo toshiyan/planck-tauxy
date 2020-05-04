@@ -1,0 +1,8 @@
+__pycache__
+__trash__
+.ipynb_checkpoints
+**/*.png
+**/*.log
+**/*.exp
+**/*.pkl
+
