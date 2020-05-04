@@ -2,6 +2,7 @@
 import numpy as np
 import healpy as hp
 import pickle
+import tqdm
 
 # from cmblensplus/wrap
 import curvedsky
@@ -16,8 +17,9 @@ import prjlib
 
 
 def init_quad(ids,stag,**kwargs):
-
+    
     # setup parameters for lensing reconstruction (see cmblensplus/utils/quad_func.py)
+
     qtau = quad_func.quad(qlist=['TT'],qtype='tau',**kwargs)
     qlen = quad_func.quad(qlist=['TT'],qtype='lens',**kwargs)
     qsrc = quad_func.quad(qlist=['TT'],qtype='src',**kwargs)
@@ -38,10 +40,9 @@ def init_quad(ids,stag,**kwargs):
 
 def aps(rlz,qobj,fklm=None,q='TT',**kwargs_ov):
 
-    for i in rlz:
+    for i in tqdm.tqdm(rlz,ncols=100,desc='aps ('+qobj.qtype+')'):
         
         if misctools.check_path(qobj.f[q].cl[i],**kwargs_ov): continue
-        if kwargs_ov['verbose']:  misctools.progress(i,rlz,text='Current progress',addtext='(qrec aps)')
         
         # load qlm
         alm = pickle.load(open(qobj.f[q].alm[i],"rb"))[0]
@@ -79,14 +80,15 @@ def qrec_bh_tau(qtau,qlen,qsrc,qtbh,rlz,q='TT',est=['lens','tau','src'],**kwargs
 
     # calculate response function
     Btt, Btg, Bts = quad_func.quad.coeff_bhe(qtau,est=est,qcomb=q,gtype='k')
+
+    # normalization for BH
     if not misctools.check_path(qtbh.f[q].al,**kwargs_ov):
         np.savetxt(qtbh.f[q].al,np.array((qtau.l,At*Btt,At)).T)
 
     # calculate bh-estimator 
-    for i in rlz:
+    for i in tqdm.tqdm(rlz,ncols=100,desc='forming bh-est'):
         
         if misctools.check_path(qtbh.f[q].alm[i],**kwargs_ov): continue
-        if kwargs_ov['verbose']:  misctools.progress(i,rlz,text='Current progress',addtext='(qrec_bh_tau)')
 
         tlm = pickle.load(open(qtau.f[q].alm[i],"rb"))[0]
         glm = pickle.load(open(qlen.f[q].alm[i],"rb"))[0]
@@ -98,6 +100,7 @@ def qrec_bh_tau(qtau,qlen,qsrc,qtbh,rlz,q='TT',est=['lens','tau','src'],**kwargs
         alm = Btt[:,None]*tlm + Btg[:,None]*glm + Bts[:,None]*slm
         pickle.dump((alm,alm*0.),open(qtbh.f[q].alm[i],"wb"),protocol=pickle.HIGHEST_PROTOCOL)
 
+    # calculate mean-field bias
     quad_func.quad.mean_rlz(qtbh,rlz,**kwargs_ov)
 
 
@@ -151,5 +154,4 @@ def interface(qrun=['norm','qrec','n0','mean'],run=['tau','len','tbh'],kwargs_ov
     if 'tBH' in run:
         qrec_bh_tau(qtau,qlen,qsrc,qtBH,p.rlz,est=['lens','tau','src'],**kwargs_ov)  #full BHE for tau
         if 'aps' in qrun:  aps(p.rlz,qtBH,fklm=p.ftalm,**kwargs_ov)
-
 

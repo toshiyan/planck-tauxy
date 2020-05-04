@@ -7,22 +7,27 @@ import tools_y
 
 #run_cmb  = ['ptsr','alm','aps']
 #run_cmb  = ['tausim','alm','aps']
-run_cmb  = ['alm','aps']
+#run_cmb  = ['alm','aps']
+run_cmb  = ['aps']
 #run_cmb = []
 
 qrun = ['norm','qrec','n0','mean','aps']
+#qrun = ['norm','qrec','mean','aps']
+#qrun = ['qrec']
 #qrun = ['n0','mean','aps']
 
 run_qrec = ['len','tau','src','tbh','tBH']
 #run_qrec = ['len','src','tbh','tBH']
+#run_qrec = ['tau']
 #run_qrec = []
 
-run_y = ['yalm','tauxy','tbhxy','tBHxy']
+#run_y = ['yalm','tauxy','tbhxy','tBHxy']
 #run_y = ['yalm']
-#run_y = ['tauxy']
+run_y = ['tauxy','tbhxy','tBHxy']
+#run_y = []
 
 kwargs_ov   = {\
-    'overwrite':False, \
+    'overwrite':True, \
     'verbose':True \
 }
 

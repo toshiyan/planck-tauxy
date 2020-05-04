@@ -6,7 +6,7 @@ import tools_qrec
 import tools_y
 
 
-def analysis_flow(run_cmb,run_qrec,qrun,run_y,ytype='milca',masktype=0,kwargs_ov={},kwargs_cmb={}):
+def analysis_flow(run_cmb,run_qrec,qrun,run_y,ytype='milca',masktype=0,yascale=1.,kwargs_ov={},kwargs_cmb={}):
 
     kwargs_qrec = {\
         'rlmin':100, \
@@ -22,7 +22,7 @@ def analysis_flow(run_cmb,run_qrec,qrun,run_y,ytype='milca',masktype=0,kwargs_ov
 
     kwargs_y = {\
         'ytype':ytype,\
-        'ascale':1.,\
+        'ascale':yascale,\
         'masktype':masktype,\
         'tausig':kwargs_cmb['tausig']\
     }
@@ -47,25 +47,27 @@ def analysis_flow(run_cmb,run_qrec,qrun,run_y,ytype='milca',masktype=0,kwargs_ov
 
 
 
-
 #run_cmb  = ['ptsr','alm','aps']
 #run_cmb  = ['tausim','alm','aps']
-#run_cmb  = ['alm','aps']
-run_cmb = []
+run_cmb  = ['aps']
+#run_cmb = []
 
 qrun = ['norm','qrec','n0','mean','aps']
 #qrun = ['n0','mean','aps']
 
-#run_qrec = ['len','tau','src','tbh','tBH']
+run_qrec = ['len','tau','src','tbh','tBH']
 #run_qrec = ['len','src','tbh','tBH']
-run_qrec = []
+#run_qrec = ['src','tBH']
+#run_qrec = []
 
-run_y = ['yalm','tauxy','tbhxy','tBHxy']
 #run_y = ['yalm']
-#run_y = ['tauxy']
+#run_y = ['yalm','tauxy','tbhxy','tBHxy']
+run_y = ['tauxy','tbhxy','tBHxy']
+
+yascale = 1.
 
 kwargs_ov   = {\
-    'overwrite':False, \
+    'overwrite':True, \
     'verbose':True \
 }
 
@@ -73,17 +75,17 @@ kwargs_cmb  = {\
     'snmin':0, \
     'snmax':100, \
     'dtype':'dr2_smica', \
-    'wtype':'Lmask', \
+    'wtype':'G60Lmask', \
     'ascale':1., \
     'lmax':2048, \
-    'fltr':'none', \
+    'fltr':'cinv', \
     'tausig': False\
 }
 
 # loop over y map options
 for ytype in ['milca','nilc']:
     for masktype in [0,1]:
-        analysis_flow(run_cmb,run_qrec,qrun,run_y,ytype='milca',masktype=masktype,kwargs_ov=kwargs_ov,kwargs_cmb=kwargs_cmb)
+        analysis_flow(run_cmb,run_qrec,qrun,run_y,ytype=ytype,masktype=masktype,yascale=yascale,kwargs_ov=kwargs_ov,kwargs_cmb=kwargs_cmb)
 
 
 

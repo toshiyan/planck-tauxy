@@ -147,7 +147,7 @@ class analysis:
         self.otag = '_oL'+str(self.olmin)+'-'+str(self.olmax)+'_b'+str(self.bn)
 
         #//// index ////#
-        self.ids = [str(i).zfill(5) for i in range(-1,200)]
+        self.ids = [str(i).zfill(5) for i in range(-1,100)]
         self.ids[0] = 'real'  # change 1st index
         ids = self.ids
 

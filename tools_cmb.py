@@ -5,6 +5,7 @@ import scipy.signal as sp
 import pickle
 import os
 from astropy.io import fits
+import tqdm
 
 #from cmblensplus/wrap/
 import basic
@@ -76,9 +77,7 @@ def map2alm_all(rlz,lmax,fmap,falm,wind,fbeam,dtype,sscale=1.,nscale=1.,ftalm=No
     # beam function
     ibl = 1./np.loadtxt(fbeam)[:lmax+1]
 
-    for i in rlz:
-        
-        if kwargs.get('verbose'):  misctools.progress(i,rlz,text='Current progress',addtext='(map2alm_all)')
+    for i in tqdm.tqdm(rlz,ncols=100,desc='map2alm:'):
         
         if i == 0:
             map2alm(lmax,fmap['s'][i],falm['s']['T'][i],wind,ibl,dtype,**kwargs)
@@ -95,7 +94,7 @@ def map2alm_all(rlz,lmax,fmap,falm,wind,fbeam,dtype,sscale=1.,nscale=1.,ftalm=No
 
 def gen_tau(rlz,lmax,ftalm,**kwargs_ov):
     
-    for i in rlz:
+    for i in tqdm.tqdm(rlz,ncols=100,desc='generate tau alm:'):
         
         if misctools.check_path(ftalm[i],**kwargs_ov): continue
         
@@ -108,10 +107,9 @@ def gen_tau(rlz,lmax,ftalm,**kwargs_ov):
 
 def alm_comb(rlz,falm,overwrite=False,verbose=True):
 
-    for i in rlz:
+    for i in tqdm.tqdm(rlz,ncols=100,desc='alm combine:'):
 
         if misctools.check_path(falm['c']['T'][i],overwrite=overwrite,verbose=verbose): continue
-        if verbose:  misctools.progress(i,rlz,text='Current progress',addtext='(alm_comb)')
 
         alm  = pickle.load(open(falm['s']['T'][i],"rb"))
 
@@ -125,7 +123,7 @@ def alm_comb(rlz,falm,overwrite=False,verbose=True):
         pickle.dump((alm+nlm+plm),open(falm['c']['T'][i],"wb"),protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def wiener_cinv_core(i,dtype,M,cl,bl,Nij,fmap,falm,sscale,nscale,ftalm,**kwargs):
+def wiener_cinv_core(i,dtype,M,cl,bl,Nij,fmap,falm,sscale,nscale,ftalm,verbose=True,**kwargs):
 
     lmax  = len(cl[0,:]) - 1
     
@@ -144,9 +142,9 @@ def wiener_cinv_core(i,dtype,M,cl,bl,Nij,fmap,falm,sscale,nscale,ftalm,**kwargs)
         else:
             talm = pickle.load(open(ftalm[i],"rb"))
             tmap = curvedsky.utils.hp_alm2map(nside,lmax,lmax,talm)
-            alm = curvedsky.utils.hp_map2alm(nside,lmax,lmax,Ts) / bl[:,None]
+            alm = curvedsky.utils.hp_map2alm(nside,lmax,lmax,Ts) / bl[0,:,None]
             alm = curvedsky.utils.mulwin(nside,lmax,lmax,alm,np.exp(-tmap)) # add tau effect
-            Ts = M * curvedsky.utils.hp_alm2map(nside,lmax,lmax,alm*bl[:,None])
+            Ts = M * curvedsky.utils.hp_alm2map(nside,lmax,lmax,alm*bl[0,:,None])
         
         # noise, ptsr
         Tn = M * reduc_map(dtype,fmap['n'][i],scale=nscale)
@@ -155,7 +153,7 @@ def wiener_cinv_core(i,dtype,M,cl,bl,Nij,fmap,falm,sscale,nscale,ftalm,**kwargs)
         T[0,0,:] = Ts + Tn + Tp
 
     # cinv
-    Tlm = curvedsky.cninv.cnfilter_freq(1,1,nside,lmax,cl,bl,Nij,T,filter='W',ro=10,**kwargs)
+    Tlm = curvedsky.cninv.cnfilter_freq(1,1,nside,lmax,cl,bl,Nij,T,filter='W',ro=10,verbose=verbose,**kwargs)
 
     pickle.dump((Tlm[0,:,:]),open(falm[i],"wb"),protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -170,28 +168,26 @@ def wiener_cinv(rlz,dtype,M,cl,fbeam,fnij,fmap,falm,sscale,nscale,ftalm=None,kwa
     Nij = M * (30.*(np.pi/10800.)/2.726e6)**(-2)
     Nij = np.reshape(Nij,(1,1,len(M)))
 
-    for i in rlz:
+    for i in tqdm.tqdm(rlz,ncols=100,desc='wiener cinv:'):
         
         if ftalm is not None and i==0: continue  # avoid real tau case
 
         if misctools.check_path(falm[i],**kwargs_ov): continue
-        if kwargs_ov.get('verbose'):  misctools.progress(i,rlz,text='Current progress',addtext='(wiener_cinv)')
+        #if kwargs_ov.get('verbose'):  misctools.progress(i,rlz,text='Current progress',addtext='(wiener_cinv)')
 
-        wiener_cinv_core(i,dtype,M,cl,bl,Nij,fmap,falm,sscale,nscale,ftalm=ftalm,**kwargs_cinv)
+        wiener_cinv_core(i,dtype,M,cl,bl,Nij,fmap,falm,sscale,nscale,ftalm=ftalm,verbose=kwargs_ov['verbose'],**kwargs_cinv)
 
 
 
-def alm2aps(rlz,lmax,fcmb,w2,stype=['s','n','p','c'],overwrite=False,verbose=True):  # compute aps
+def alm2aps(rlz,lmax,fcmb,w2,stype=['s','n','p','c'],**kwargs_ov):  # compute aps
     # output is ell, TT(s), TT(n), TT(p), TT(s+n+p)
 
-    if misctools.check_path(fcmb.scl,overwrite=overwrite,verbose=verbose):  return
+    if misctools.check_path(fcmb.scl,**kwargs_ov):  return
 
     eL  = np.linspace(0,lmax,lmax+1)
     cls = np.zeros((len(rlz),4,lmax+1))
 
-    for i in rlz:
-
-        if verbose:  misctools.progress(i,rlz,text='Current progress',addtext='(aps cmb)')
+    for i in tqdm.tqdm(rlz,ncols=100,desc='cmb alm2aps:'):
 
         if 's' in stype:  salm = pickle.load(open(fcmb.alms['s']['T'][i],"rb"))
         if i>0:
@@ -209,19 +205,19 @@ def alm2aps(rlz,lmax,fcmb,w2,stype=['s','n','p','c'],overwrite=False,verbose=Tru
 
     # save to files
     if rlz[-1] >= 2:
-        if verbose:  print('save sim')
+        if kwargs_ov['verbose']:  print('cmb alm2aps: save sim')
         i0 = max(0,1-rlz[0])
         np.savetxt(fcmb.scl,np.concatenate((eL[None,:],np.mean(cls[i0:,:,:],axis=0),np.std(cls[i0:,:,:],axis=0))).T)
 
     if rlz[0] == 0:
-        if verbose:  print('save real')
+        if kwargs_ov['verbose']:  print('cmb alm2aps: save real')
         np.savetxt(fcmb.ocl,np.array((eL,cls[0,0,:])).T)
 
 
 
 def gen_ptsr(rlz,fcmb,fbeam,fseed,fcl,fmap,w,lmin=1000,overwrite=False,verbose=True): # generating ptsr contributions
 
-    #if p.dtype=='nilc': lmin = 800
+    #if dtype=='nilc': lmin = 800
 
     # difference spectrum with smoothing
     scl = (np.loadtxt(fcmb.scl)).T[1]
@@ -249,12 +245,11 @@ def gen_ptsr(rlz,fcmb,fbeam,fseed,fcl,fmap,w,lmin=1000,overwrite=False,verbose=T
     #pfunc = hp.sphtfunc.pixwin(nside)[:lmax+1]
 
     # multiply cl, transform to map and save it
-    for i in rlz:
+    for i in tqdm.tqdm(rlz,ncols=100,desc='gen ptsr:'):
 
         if misctools.check_path(fcmb.alms['p']['T'][i],overwrite=overwrite,verbose=verbose): continue
         
         if i==0: continue
-        if verbose:  misctools.progress(i,rlz,text='Current progress',addtext='(gen_ptsr)')
         
         palm = pickle.load(open(fseed[i],"rb"))
         palm *= dcl[:,None]*bl[:,None] #multiply beam-convolved cl

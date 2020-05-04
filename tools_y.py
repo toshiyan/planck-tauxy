@@ -32,7 +32,7 @@ class compy():  # compton y
         self.ymask    = 'M'+str(self.masktype+1)
         self.ascale   = ascale
 
-        # sim
+        # add tauxy signal sim
         self.tausig = tausig
 
         # tag
@@ -95,15 +95,17 @@ def init_cross(qobj,cy,ids,stag,q='TT'):
     return xobj
 
 
-def ymap2yalm(cy,Wy,rlz,lmax,w2,ftalm):
+
+def ymap2yalm(cy,Wy,pbar,lmax,w2,ftalm,**kwargs_ov):
 
     nside = hp.pixelfunc.get_nside(Wy)
     l = np.linspace(0,lmax,lmax+1)
     bl = CMB.beam(10.,lmax)
 
-    pbar = tqdm.tqdm(rlz,ncols=100)
     for i in pbar:
-        pbar.set_description('ymap2alm')
+        pbar.set_description('ymap2alm ('+cy.ytype+','+str(cy.ymask)+')')
+
+        if misctools.check_path(cy.fyalm[i],**kwargs_ov): continue
 
         yalm = {}
         clyy = {}
@@ -137,13 +139,14 @@ def ymap2yalm(cy,Wy,rlz,lmax,w2,ftalm):
 
 
 
-def quadxy(cy,lmax,rlz,qobj,fx,w3,w2,**kwargs_ov):
+def quadxy(cy,lmax,pbar,qobj,fx,w3,w2,**kwargs_ov):
 
     l = np.linspace(0,lmax,lmax+1)
 
-    for i in rlz:
+    for i in pbar:
+        pbar.set_description('quad x y ('+qobj.qtype+')')
 
-        print(i)
+        if misctools.check_path(fx.xl[i],**kwargs_ov): continue
 
         # load tau
         tlm = pickle.load(open(qobj.f['TT'].alm[i],"rb"))[0][:lmax+1,:lmax+1]
@@ -163,50 +166,19 @@ def quadxy(cy,lmax,rlz,qobj,fx,w3,w2,**kwargs_ov):
         np.savetxt(fx.xl[i],np.concatenate((l[None,:],xl)).T)
 
 
-def ydeproj(cy,lmax,rlz,qtbh,qlen,fx,w3,wlk,**kwargs_ov):
-
-    l  = np.linspace(0,lmax,lmax+1)    
-    xl = np.zeros((len(rlz),3,lmax+1))
-
-    for i in rlz:
-
-        print(i)
-
-        # load tau
-        tlm = pickle.load(open(qtbh.f['TT'].alm[i],"rb"))[0][:lmax+1,:lmax+1]
-        tmf = pickle.load(open(qtbh.f['TT'].mfb[i],"rb"))[0][:lmax+1,:lmax+1]
-        plm = pickle.load(open(qlen.f['TT'].alm[i],"rb"))[0][:lmax+1,:lmax+1]
-        pmf = pickle.load(open(qlen.f['TT'].mfb[i],"rb"))[0][:lmax+1,:lmax+1]
-        plm -= pmf
-        tlm -= tmf
-        tlm = -tlm
-            
-        # load yalm
-        ylm = {}
-        ylm[0], ylm[1], ylm[2] = pickle.load(open(cy.fyalm[i],"rb"))
-
-        # deprojected cross spectrum
-        for yn in range(3):
-            dylm = ylm[yn][:lmax+1,:lmax+1] - wlk[:lmax+1,None]*plm
-            xl[i,yn,:] = curvedsky.utils.alm2cl(lmax,tlm,dylm)/w3
-
-        np.savetxt(fx.dl[i],np.concatenate((l[None,:],xl[i,:,:])).T)
-
 
 def theta_mask(nside,theta):
 
     mask = -curvedsky.utils.cosin_healpix(nside)
     v    = np.cos((90.-theta)*np.pi/180.)
-    
-    print(v)
-    
     mask[mask>=-v] = 1.
     mask[mask<=-v] = 0.
     
     return mask
 
 
-def interface(run=['yalm','tauxy'],kwargs_ov={},kwargs_cmb={},kwargs_qrec={},kwargs_y={},ep=1e-30):
+
+def interface(run=['yalm','tauxy'],kwargs_ov={},kwargs_cmb={},kwargs_qrec={},kwargs_y={}):
     
     p = prjlib.init_analysis(**kwargs_cmb)
     W, M, wn = prjlib.set_mask(p.famask)
@@ -217,6 +189,9 @@ def interface(run=['yalm','tauxy'],kwargs_ov={},kwargs_cmb={},kwargs_qrec={},kwa
 
     if p.fltr == 'cinv':
         Wt = M
+
+    # status bar
+    pbar = tqdm.tqdm(p.rlz,ncols=100)
 
     # define objects
     qtau, qlen, qsrc, qtbh, qtBH = tools_qrec.init_quad(p.ids,p.stag,**kwargs_qrec)
@@ -229,35 +204,26 @@ def interface(run=['yalm','tauxy'],kwargs_ov={},kwargs_cmb={},kwargs_qrec={},kwa
     
     if 'yalm' in run:
     
-        ymap2yalm(cy,Wy,p.rlz,p.lmax,w2,p.ftalm)
+        ymap2yalm(cy,Wy,pbar,p.lmax,w2,p.ftalm,**kwargs_ov)
 
     if 'tauxy' in run:
 
         fxtau = init_cross(qtau,cy,p.ids,p.stag)
-        quadxy(cy,qtau.olmax,p.rlz,qtau,fxtau,w3,w2)
+        quadxy(cy,qtau.olmax,pbar,qtau,fxtau,w3,w2,**kwargs_ov)
 
     if 'tbhxy' in run:
 
         fxtbh = init_cross(qtbh,cy,p.ids,'bh_'+p.stag)
-        quadxy(cy,qtbh.olmax,p.rlz,qtbh,fxtbh,w3,w2)
+        quadxy(cy,qtbh.olmax,pbar,qtbh,fxtbh,w3,w2,**kwargs_ov)
 
     if 'tBHxy' in run:
 
         fxtBH = init_cross(qtBH,cy,p.ids,'BH_'+p.stag)
-        quadxy(cy,qtBH.olmax,p.rlz,qtBH,fxtBH,w3,w2)
+        quadxy(cy,qtBH.olmax,pbar,qtBH,fxtBH,w3,w2,**kwargs_ov)
 
     #if 'kapxy' in run:
 
     #    fxlen, fxlbh = init_cross(qlen,qlbh,cy,p.ids,p.stag)
     #    quadxy(cy,qlen.olmax,p.rlz,qlen,fxlen,w3,w2)
-
-    #if 'deproj' in run:
-    #    fxtau, fxtbh = init_cross(qtau,qtbh,cy,p.ids,p.stag)
-    #    fxlen, fxlbh = init_cross(qlen,qlbh,cy,p.ids,p.stag)
-    #    nlkk = np.loadtxt(qlen.f['TT'].al,unpack=True)[1]
-    #    clyk = 1e-10/np.linspace(0,p.lmax,p.lmax+1)
-    #    wlk = clyk[:p.lmax+1]/(p.ckk+nlkk[:p.lmax+1])
-    #    ydeproj(cy,qtbh.olmax,p.rlz,qtbh,qlen,fxtbh,w3,wlk,**kwargs_ov)
-
 
 
