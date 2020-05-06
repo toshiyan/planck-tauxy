@@ -67,19 +67,6 @@ class cmb:
         self.ocl = d_aps+'aps_obs_1d_'+p.stag+'.dat'
 
 
-class xbispec():
-
-    def __init__(self,xdir,qtag,ytag,otag,ids):
-
-        xtag = qtag + '_' + ytag
-        xaps = xdir + '/bsp/'
-
-        self.mbsp = xaps+'bl_'+xtag+otag+'.dat'
-        self.obsp = xaps+'bl_obs_'+xtag+otag+'.dat'
-        self.mxsp = xaps+'xl_'+xtag+otag+'.dat'
-        self.oxsp = xaps+'xl_obs_'+xtag+otag+'.dat'
-
-
 #* Define parameters
 class analysis:
 
@@ -278,24 +265,21 @@ def init_analysis(**kwargs):
     return p
 
 
-def set_mask(fmask,wtype='',verbose=False):
+def set_mask(fmask):
 
     # read window
-    if wtype == 'Fullsky':
-        w = 1.
-    else:
-        w = hp.fitsfunc.read_map(fmask,verbose=verbose)
-        if hp.pixelfunc.get_nside(w) != 2048:
-            sys.exit('nside of window is not 2048')
-
-    # normalization
-    wn = np.zeros(5)
-    for n in range(1,5):
-        wn[n] = np.average(w**n)
+    w = hp.fitsfunc.read_map(fmask,verbose=False)
+    if hp.pixelfunc.get_nside(w) != 2048:
+        sys.exit('nside of window is not 2048')
 
     # binary mask
     M = w/(w+1e-30)
+
+    # normalization
+    wn = np.zeros(5)
     wn[0] = np.mean(M)
+    for n in range(1,5):
+        wn[n] = np.average(w**n)
 
     return w, M, wn
 

@@ -96,14 +96,13 @@ def init_cross(qobj,cy,ids,stag,q='TT'):
 
 
 
-def ymap2yalm(cy,Wy,pbar,lmax,w2,ftalm,**kwargs_ov):
+def ymap2yalm(cy,Wy,rlz,lmax,w2,ftalm,**kwargs_ov):
 
     nside = hp.pixelfunc.get_nside(Wy)
     l = np.linspace(0,lmax,lmax+1)
     bl = CMB.beam(10.,lmax)
 
-    for i in pbar:
-        pbar.set_description('ymap2alm ('+cy.ytype+','+str(cy.ymask)+')')
+    for i in tqdm.tqdm(rlz,ncols=100,desc='ymap2alm ('+cy.ytype+','+str(cy.ymask)+')'):
 
         if misctools.check_path(cy.fyalm[i],**kwargs_ov): continue
 
@@ -139,12 +138,11 @@ def ymap2yalm(cy,Wy,pbar,lmax,w2,ftalm,**kwargs_ov):
 
 
 
-def quadxy(cy,lmax,pbar,qobj,fx,w3,w2,**kwargs_ov):
+def quadxy(cy,lmax,rlz,qobj,fx,w3,w2,**kwargs_ov):
 
     l = np.linspace(0,lmax,lmax+1)
 
-    for i in pbar:
-        pbar.set_description('quad x y ('+qobj.qtype+')')
+    for i in tqdm.tqdm(rlz,ncols=100,desc='quad x y ('+qobj.qtype+')'):
 
         if misctools.check_path(fx.xl[i],**kwargs_ov): continue
 
@@ -190,9 +188,6 @@ def interface(run=['yalm','tauxy'],kwargs_ov={},kwargs_cmb={},kwargs_qrec={},kwa
     if p.fltr == 'cinv':
         Wt = M
 
-    # status bar
-    pbar = tqdm.tqdm(p.rlz,ncols=100)
-
     # define objects
     qtau, qlen, qsrc, qtbh, qtBH = tools_qrec.init_quad(p.ids,p.stag,**kwargs_qrec)
 
@@ -203,23 +198,19 @@ def interface(run=['yalm','tauxy'],kwargs_ov={},kwargs_cmb={},kwargs_qrec={},kwa
     w3 = np.average(Wy*Wt**2)
     
     if 'yalm' in run:
-    
-        ymap2yalm(cy,Wy,pbar,p.lmax,w2,p.ftalm,**kwargs_ov)
+        ymap2yalm(cy,Wy,p.rlz,p.lmax,w2,p.ftalm,**kwargs_ov)
 
     if 'tauxy' in run:
-
         fxtau = init_cross(qtau,cy,p.ids,p.stag)
-        quadxy(cy,qtau.olmax,pbar,qtau,fxtau,w3,w2,**kwargs_ov)
+        quadxy(cy,qtau.olmax,p.rlz,qtau,fxtau,w3,w2,**kwargs_ov)
 
     if 'tbhxy' in run:
-
         fxtbh = init_cross(qtbh,cy,p.ids,'bh_'+p.stag)
-        quadxy(cy,qtbh.olmax,pbar,qtbh,fxtbh,w3,w2,**kwargs_ov)
+        quadxy(cy,qtbh.olmax,p.rlz,qtbh,fxtbh,w3,w2,**kwargs_ov)
 
     if 'tBHxy' in run:
-
         fxtBH = init_cross(qtBH,cy,p.ids,'BH_'+p.stag)
-        quadxy(cy,qtBH.olmax,pbar,qtBH,fxtBH,w3,w2,**kwargs_ov)
+        quadxy(cy,qtBH.olmax,p.rlz,qtBH,fxtBH,w3,w2,**kwargs_ov)
 
     #if 'kapxy' in run:
 

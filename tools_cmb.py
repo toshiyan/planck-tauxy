@@ -159,7 +159,7 @@ def wiener_cinv_core(i,dtype,M,cl,bl,Nij,fmap,falm,sscale,nscale,ftalm,verbose=T
 
 
 
-def wiener_cinv(rlz,dtype,M,cl,fbeam,fnij,fmap,falm,sscale,nscale,ftalm=None,kwargs_ov={},kwargs_cinv={}):
+def wiener_cinv(rlz,dtype,M,cl,fbeam,fmap,falm,sscale,nscale,ftalm=None,kwargs_ov={},kwargs_cinv={}):
 
     lmin = 1
     lmax = len(cl[0,:]) - 1
@@ -173,7 +173,6 @@ def wiener_cinv(rlz,dtype,M,cl,fbeam,fnij,fmap,falm,sscale,nscale,ftalm=None,kwa
         if ftalm is not None and i==0: continue  # avoid real tau case
 
         if misctools.check_path(falm[i],**kwargs_ov): continue
-        #if kwargs_ov.get('verbose'):  misctools.progress(i,rlz,text='Current progress',addtext='(wiener_cinv)')
 
         wiener_cinv_core(i,dtype,M,cl,bl,Nij,fmap,falm,sscale,nscale,ftalm=ftalm,verbose=kwargs_ov['verbose'],**kwargs_cinv)
 
@@ -299,15 +298,17 @@ def interface(run=[],kwargs_cmb={},kwargs_ov={},kwargs_cinv={}):
             alm_comb(p.rlz,p.fcmb.alms,**kwargs_ov)
 
         if 'aps' in run:  # compute cl
-            alm2aps(p.rlz,p.lmax,p.fcmb,wn[2],overwrite=True,verbose=kwargs_ov['verbose'])
+            alm2aps(p.rlz,p.lmax,p.fcmb,wn[2],**kwargs_ov)
 
-    if p.fltr == 'cinv':  # cinv filtering
+    if p.fltr == 'cinv':  # map -> alm with cinv filtering
+
+        falm = p.fcmb.alms['c']['T']  #output file of cinv alms
     
         if 'alm' in run:  # cinv filtering here
-            wiener_cinv(p.rlz,p.dtype,M,p.lcl[0:1,:p.lmax+1],p.fbeam,p.fcmb.fnij,p.fimap,p.fcmb.alms['c']['T'],p.sscale,p.nscale,ftalm=p.ftalm,kwargs_ov=kwargs_ov,kwargs_cinv=kwargs_cinv)
+            wiener_cinv(p.rlz,p.dtype,M,p.lcl[0:1,:p.lmax+1],p.fbeam,p.fimap,falm,p.sscale,p.nscale,ftalm=p.ftalm,kwargs_ov=kwargs_ov,kwargs_cinv=kwargs_cinv)
 
         if 'aps' in run:  # aps of filtered spectrum
-            p.fcmb.alms['s']['T'] = p.fcmb.alms['c']['T']
+            p.fcmb.alms['s']['T'] = falm # since cinv only save 'c', not 's'
             alm2aps(p.rlz,p.lmax,p.fcmb,wn[0],stype=['s','c'],**kwargs_ov)
     
 
