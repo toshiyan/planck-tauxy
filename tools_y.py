@@ -73,7 +73,8 @@ class xspec():
         
         xtag = qtag + '_' + ytag
 
-        self.xl  = [xaps+'/rlz/xl_'+xtag+'_'+x+'.dat' for x in ids]
+        self.xl   = [xaps+'/rlz/xl_'+xtag+'_'+x+'.dat' for x in ids]
+        self.xcov = xaps+'/xcov_'+xtag+'.dat'
 
 
 
