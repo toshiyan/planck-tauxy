@@ -32,6 +32,7 @@ def data_directory():
     direct['ysz']  = root + 'ysz/'
     direct['xcor'] = root + 'xcor/'
     direct['ptsr'] = root + 'ptsr/'
+    direct['nosz'] = root + 'nosz/'
 
     return direct
 
@@ -112,7 +113,7 @@ class analysis:
 
         # noise scaling (correction to underestimate of noise in sim)
         self.nscale = 1.
-        if self.dtype!='dr2_nilc':  
+        if self.dtype!='dr2_nilc' and self.dtype!='dr3_nosz':  
             self.nscale = 1.03 # derived by comparing between obs and sim spectra of HM1-HM2
 
 
@@ -144,7 +145,7 @@ class analysis:
         self.fimap = {}
 
         # PLANCK DR2
-        if self.dtype in ['dr2_nilc','dr2_smicaffp8','dr2_nosz']:
+        if self.dtype in ['dr2_nilc','dr2_smicaffp8']:
             self.fimap['s']  = [PLK+'ffp8/compsep/mc_cmb/ffp8_'+self.dtype.replace('dr2_','')+'_int_cmb_mc_'+x+'_005a_2048.fits' for x in ids]
             self.fimap['n']  = [PLK+'ffp8/compsep/mc_noise/ffp8_'+self.dtype.replace('dr2_','')+'_int_noise_mc_'+x+'_005a_2048.fits' for x in ids]
 
@@ -152,6 +153,11 @@ class analysis:
             self.fimap['s']  = [PLK+'ffp8.1/compsep/dx11_v2_smica_int_cmb_new_mc_'+x+'_005a_2048.fits' for x in ids]
             self.fimap['n']  = [PLK+'ffp8.1/compsep/dx11_v2_smica_int_noise_mc_'+x+'_005a_2048.fits' for x in ids]
         
+        if self.dtype == 'dr3_nosz':
+            PLK = d['dr2']
+            self.fimap['s']  = [PLK+'ffp8.1/compsep/dx11_v2_smica_int_cmb_new_mc_'+x+'_005a_2048.fits' for x in ids]
+            self.fimap['n']  = [d['nosz']+'noise_'+x+'.fits' for x in ids]
+ 
         if self.dtype == 'dr2_smicahm': # smica half mission
             smap1 = [PLK+'ffp8.1/compsep/dx11_v2_smica_int_cmb_new_hm1_mc_'+x+'_005a_2048.fits' for x in ids]
             smap2 = [PLK+'ffp8.1/compsep/dx11_v2_smica_int_cmb_new_hm2_mc_'+x+'_005a_2048.fits' for x in ids]
@@ -171,8 +177,8 @@ class analysis:
         if self.dtype == 'dr2_smicaffp8': #same as dr2_smica
             self.fimap['s'][0] = PLK+'pr2/cmbmaps/COM_CMB_IQU-smica-field-Int_2048_R2.01_full.fits'
         
-        if self.dtype == 'dr2_nosz':
-            self.fimap['s'][0] = d['cmb']+'map/nosz.fits'
+        if self.dtype == 'dr3_nosz':
+            self.fimap['s'][0] = d['inp']+'COM_CMB_IQU-smica-nosz_2048_R3.00_full.fits'
 
         # input klm realizations
         self.fiklm = [ d['inp'] + 'sky_klms/sim_'+x[1:]+'_klm.fits' for x in ids ]
@@ -196,16 +202,24 @@ class analysis:
 
         # beam
         self.fbeam = d['bem'] + self.dtype+'.dat'
-        if self.dtype == 'dr2_nosz': 
+        if self.dtype == 'dr3_nosz': 
             self.fbeam = d['bem'] + 'dr2_smica.dat'
 
+        # for nosz
+        if self.dtype == 'dr3_nosz':
+            self.fnseed  = [d['nosz']+'seed_'+x+'.fits' for x in ids]
+            self.fnosz_nl = d['nosz']+'noise_aps.dat'
+            self.fimap['p'] = [x for x in ids]
+
         # ptsr seed
-        ptag = self.wtype+'_a'+str(self.ascale)+'deg'
-        self.fpseed  = [d['ptsr']+x+'.fits' for x in ids]
-        self.fptsrcl = d['ptsr']+'ptsr_'+ptag+'.dat'
-        self.fimap['p'] = [d['ptsr']+'ptsr_'+ptag+'_'+x+'.fits' for x in ids]
+        else:
+            ptag = self.wtype+'_a'+str(self.ascale)+'deg'
+            self.fpseed  = [d['ptsr']+x+'.fits' for x in ids]
+            self.fptsrcl = d['ptsr']+'ptsr_'+ptag+'.dat'
+            self.fimap['p'] = [d['ptsr']+'ptsr_'+ptag+'_'+x+'.fits' for x in ids]
 
 
+            
     def set_mask_filename(self):
         
         d = data_directory()
@@ -219,6 +233,8 @@ class analysis:
             self.fmask = ''
         elif self.wtype == 'Lmask':
             self.fmask = dwin + 'COM_Mask_Lensing_2048_R2.00.fits'
+        elif self.wtype == 'LmaskDR3':
+            self.fmask = dwin + 'COM_Mask_Lensing_2048_R3.00.fits'
         elif self.wtype == 'G60':
             self.fmask = dwin + 'COM_Mask_Lensing_2048_R2.00_G60.fits'
         elif self.wtype == 'G60Lmask':

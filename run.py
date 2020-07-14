@@ -49,10 +49,10 @@ def analysis_flow(run_cmb,run_qrec,qrun,run_y,ytypes=['milca','nilc'],mtypes=[0,
 
 
 
-#run_cmb  = ['ptsr','alm','aps']
-#run_cmb  = ['tausim','alm','aps']
-#run_cmb  = ['aps']
-run_cmb = []
+#run_cmb = ['ptsr','alm','aps']
+#run_cmb = ['tausim','alm','aps']
+run_cmb = ['alm','aps']
+#run_cmb = []
 
 qrun = ['norm','qrec','n0','mean','aps']
 
@@ -62,20 +62,25 @@ run_qrec = ['len','tau','src','tbh','tBH']
 #run_y = ['yalm']
 #run_y = ['yalm','tauxy','tbhxy','tBHxy']
 run_y = ['tauxy','tbhxy','tBHxy']
+#run_y = []
 
 kwargs_ov   = {\
     'overwrite':True, \
+    #'overwrite':False, \
     'verbose':True \
 }
 
 kwargs_cmb  = {\
     'snmin':0, \
     'snmax':100, \
-    'dtype':'dr2_smica', \
-    'wtype':'Lmask', \
+    #'dtype':'dr2_smica', \
+    'dtype':'dr3_nosz', \
+    #'wtype':'Lmask', \
+    'wtype':'LmaskDR3', \
     'ascale':1., \
     'lmax':2048, \
     'fltr':'cinv', \
+    #'fltr':'none', \
     'tausig': False\
 }
 

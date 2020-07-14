@@ -18,10 +18,11 @@ import misctools
 import prjlib
 
 
-def get_beam(fsmap,fbeam,lmax):
+def save_beam(fsmap,fbeam,lmax):
 
-    bl = fits.getdata(fsmap,extname='BEAMTF')
-    np.savetxt(fbeam,bl)
+    if not os.path.exists(fbeam):
+        bl = fits.getdata(fsmap,extname='BEAMTF')
+        np.savetxt(fbeam,bl)
 
 
 def reduc_map(dtype,fmap,TK=2.726,field=0,scale=1.):
@@ -60,6 +61,7 @@ def map2alm(lmax,fmap,falm,mask,ibl,dtype,scale=1.,tmap=None,**kwargs):
         alm *= ibl[:,None]#/pfunc[:,None]
 
     else:
+        # non-zero tau sim
         # deconvolve beam first
         hpmap = reduc_map(dtype,fmap,scale=scale)
         nside = hp.pixelfunc.get_nside(hpmap)
@@ -72,7 +74,7 @@ def map2alm(lmax,fmap,falm,mask,ibl,dtype,scale=1.,tmap=None,**kwargs):
     pickle.dump((alm),open(falm,"wb"),protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def map2alm_all(rlz,lmax,fmap,falm,wind,fbeam,dtype,sscale=1.,nscale=1.,ftalm=None,**kwargs):
+def map2alm_all(rlz,lmax,fmap,falm,wind,fbeam,dtype,sscale=1.,nscale=1.,stype=['s','n'],ftalm=None,**kwargs):
 
     # beam function
     ibl = 1./np.loadtxt(fbeam)[:lmax+1]
@@ -80,16 +82,23 @@ def map2alm_all(rlz,lmax,fmap,falm,wind,fbeam,dtype,sscale=1.,nscale=1.,ftalm=No
     for i in tqdm.tqdm(rlz,ncols=100,desc='map2alm:'):
         
         if i == 0:
+            
+            # real data
             map2alm(lmax,fmap['s'][i],falm['s']['T'][i],wind,ibl,dtype,**kwargs)
+        
         else:
+
+            # simulation
+
             if ftalm is None:
                 tmap = None
             else:
                 nside = hp.pixelfunc.get_nside(wind)
                 talm = pickle.load(open(ftalm[i],"rb"))
                 tmap = curvedsky.utils.hp_alm2map(nside,lmax,lmax,talm)
-            map2alm(lmax,fmap['s'][i],falm['s']['T'][i],wind,ibl,dtype,scale=sscale,tmap=tmap,**kwargs)
-            map2alm(lmax,fmap['n'][i],falm['n']['T'][i],wind,ibl,dtype,scale=nscale,**kwargs)
+        
+            if 's' in stype:  map2alm(lmax,fmap['s'][i],falm['s']['T'][i],wind,ibl,dtype,scale=sscale,tmap=tmap,**kwargs)
+            if 'n' in stype:  map2alm(lmax,fmap['n'][i],falm['n']['T'][i],wind,ibl,dtype,scale=nscale,**kwargs)
 
 
 def gen_tau(rlz,lmax,ftalm,**kwargs_ov):
@@ -105,20 +114,18 @@ def gen_tau(rlz,lmax,ftalm,**kwargs_ov):
         pickle.dump((alm),open(ftalm[i],"wb"),protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def alm_comb(rlz,falm,overwrite=False,verbose=True):
+def alm_comb(rlz,falm,stype=['n','p'],overwrite=False,verbose=True):
 
     for i in tqdm.tqdm(rlz,ncols=100,desc='alm combine:'):
 
         if misctools.check_path(falm['c']['T'][i],overwrite=overwrite,verbose=verbose): continue
 
-        alm  = pickle.load(open(falm['s']['T'][i],"rb"))
-
+        alm = pickle.load(open(falm['s']['T'][i],"rb"))
+        nlm = 0.*alm
+        plm = 0.*alm
         if i>0:
-            nlm = pickle.load(open(falm['n']['T'][i],"rb"))
-            plm = pickle.load(open(falm['p']['T'][i],"rb"))
-        else:
-            nlm = 0.*alm
-            plm = 0.*alm
+            if 'n' in stype:  nlm = pickle.load(open(falm['n']['T'][i],"rb"))
+            if 'p' in stype:  plm = pickle.load(open(falm['p']['T'][i],"rb"))
 
         pickle.dump((alm+nlm+plm),open(falm['c']['T'][i],"wb"),protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -148,7 +155,10 @@ def wiener_cinv_core(i,dtype,M,cl,bl,Nij,fmap,falm,sscale,nscale,ftalm,verbose=T
         
         # noise, ptsr
         Tn = M * reduc_map(dtype,fmap['n'][i],scale=nscale)
-        Tp = M * reduc_map(dtype,fmap['p'][i].replace('a0.0deg','a1.0deg'),TK=1.) # approximately use 1.0deg apodization case
+        if 'nosz' in dtype:
+            Tp = 0.
+        else:
+            Tp = M * reduc_map(dtype,fmap['p'][i].replace('a0.0deg','a1.0deg'),TK=1.) # approximately use 1.0deg apodization case
 
         T[0,0,:] = Ts + Tn + Tp
 
@@ -259,6 +269,43 @@ def gen_ptsr(rlz,fcmb,fbeam,fseed,fcl,fmap,w,lmin=1000,overwrite=False,verbose=T
         palm /= bl[:,None]  #beam deconvolution
         pickle.dump((palm),open(fcmb.alms['p']['T'][i],"wb"),protocol=pickle.HIGHEST_PROTOCOL)
 
+        
+def gen_nosz_noise(rlz,fcmb,fbeam,fnseed,fnl,fimap,TK=2.726,lmin=800,overwrite=False,verbose=True):
+
+    rcl = (np.loadtxt(fcmb.ocl)).T[1]
+    scl = (np.loadtxt(fcmb.scl)).T[1]
+    lmax = len(rcl) - 1
+
+    # interpolate
+    dCL = rcl - scl
+    dcl = sp.savgol_filter(dCL, 101, 1)
+    dcl[dcl<=0] = 1e-30
+    dcl[:lmin]  = 1e-30
+    np.savetxt(fnl,np.array((np.linspace(0,lmax,lmax+1),dcl,dCL)).T)
+    dcl = np.sqrt(dcl)
+    
+    # generating seed, only for the first run
+    for i in rlz:
+        if not os.path.exists(fnseed[i]):
+            alm = curvedsky.utils.gauss1alm(lmax,np.ones(lmax+1))
+            pickle.dump((alm),open(fnseed[i],"wb"),protocol=pickle.HIGHEST_PROTOCOL)
+
+    # load beam function
+    bl = np.loadtxt(fbeam)[:lmax+1]
+    nside = 2048
+    
+    # multiply cl, transform to map and save it
+    for i in tqdm.tqdm(rlz,ncols=100,desc='gen noise for nosz:'):
+
+        if misctools.check_path(fcmb.alms['n']['T'][i],overwrite=overwrite,verbose=verbose): continue
+
+        if i==0: continue
+
+        nalm = pickle.load(open(fnseed[i],"rb"))
+        nalm *= dcl[:,None]*bl[:,None] #multiply beam-convolved cl
+        nmap = curvedsky.utils.hp_alm2map(nside,lmax,lmax,nalm) * TK
+        hp.fitsfunc.write_map(fimap['n'][i],nmap,overwrite=True)
+    
 
 def interface(run=[],kwargs_cmb={},kwargs_ov={},kwargs_cinv={}):
 
@@ -271,13 +318,14 @@ def interface(run=[],kwargs_cmb={},kwargs_ov={},kwargs_cinv={}):
 
     # read beam function
     if p.dtype in ['dr2_nilc','dr2_smica','dr3_nilc','dr3_smica']:
-        get_beam(p.fimap['s'][0],p.fbeam,p.lmax)
+        save_beam(p.fimap['s'][0],p.fbeam,p.lmax)
 
+    # generate tau alm and save to ftalm file
     if 'tausim' in run and p.tausig:
-        # generate tau alm and save to ftalm file
         gen_tau(p.rlz,p.lmax,p.ftalm,**kwargs_ov)
     
-    if 'ptsr' in run and not p.tausig:  # generate ptsr
+    # generate ptsr
+    if 'ptsr' in run and not p.tausig and p.dtype!='dr3_nosz':
         # compute signal and noise alms
         map2alm_all(p.rlz,p.lmax,p.fimap,p.fcmb.alms,w,p.fbeam,p.dtype,p.sscale,p.nscale,**kwargs_ov)
         # compute signal and noise spectra but need to change file names
@@ -288,19 +336,39 @@ def interface(run=[],kwargs_cmb={},kwargs_ov={},kwargs_cinv={}):
         # generate ptsr alm from obs - (sig+noi) spectrum
         gen_ptsr(p.rlz,q.fcmb,p.fbeam,p.fpseed,p.fptsrcl,p.fimap,w,**kwargs_ov) # generate map and alm from above computed aps
 
-    if p.fltr == 'none':  # use normal transform to alm
+    # noise
+    if 'ptsr' in run and p.dtype=='dr3_nosz':
+        map2alm_all(p.rlz,p.lmax,p.fimap,p.fcmb.alms,w,p.fbeam,p.dtype,p.sscale,p.nscale,stype=['s'],**kwargs_ov)
+        q = prjlib.init_analysis(**kwargs_cmb)
+        q.fcmb.scl = q.fcmb.scl.replace('.dat','_tmp.dat')
+        q.fcmb.ocl = q.fcmb.ocl.replace('.dat','_tmp.dat')
+        alm2aps(p.rlz,p.lmax,q.fcmb,wn[2],stype=['s'],**kwargs_ov)
+        gen_nosz_noise(p.rlz,q.fcmb,p.fbeam,p.fnseed,p.fnosz_nl,p.fimap,**kwargs_ov)
+
+
+    # use normal transform to alm
+    if p.fltr == 'none':
+        
+        if p.dtype == 'dr3_nosz':
+            stypes = ['s','n','c']
+        else:
+            stypes = ['s','n','p','c']
     
         if 'alm' in run:  # combine signal, noise and ptsr
             if p.tausig:
                 # modify signal alm to include tau effect
                 map2alm_all(p.rlz,p.lmax,p.fimap,p.fcmb.alms,w,p.fbeam,p.dtype,p.sscale,p.nscale,ftalm=p.ftalm,**kwargs_ov)
-            # combine signal, noise and ptsr alms 
-            alm_comb(p.rlz,p.fcmb.alms,**kwargs_ov)
+            # convert map to alm
+            if p.dtype == 'dr3_nosz':
+                map2alm_all(p.rlz,p.lmax,p.fimap,p.fcmb.alms,w,p.fbeam,p.dtype,p.sscale,p.nscale,**kwargs_ov)
+            # combine signal, noise and ptsr alms
+            alm_comb(p.rlz,p.fcmb.alms,stype=stypes,**kwargs_ov)
 
         if 'aps' in run:  # compute cl
-            alm2aps(p.rlz,p.lmax,p.fcmb,wn[2],**kwargs_ov)
+            alm2aps(p.rlz,p.lmax,p.fcmb,wn[2],stype=stypes,**kwargs_ov)
 
-    if p.fltr == 'cinv':  # map -> alm with cinv filtering
+    # map -> alm with cinv filtering
+    if p.fltr == 'cinv':  
 
         falm = p.fcmb.alms['c']['T']  #output file of cinv alms
     

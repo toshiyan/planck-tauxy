@@ -29,4 +29,6 @@ check_file COM_CompMap_Compton-SZMap_R2.01.tgz https://irsa.ipac.caltech.edu/dat
 # Full DR3 tar ball
 check_file COM_CompMap_Compton-SZMap_R2.02.tgz https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/component-maps/foregrounds/COM_CompMap_Compton-SZMap_R2.02.tgz
 
+# SMICA No-SZ
+#wget -O COM_CMB_IQU-smica-nosz_2048_R3.00_full.fits "http://pla.esac.esa.int/pla/aio/product-action?MAP.MAP_ID=COM_CMB_IQU-smica-nosz_2048_R3.00_full.fits"
 
