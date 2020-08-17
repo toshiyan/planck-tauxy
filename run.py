@@ -17,15 +17,24 @@ def analysis_flow(run_cmb,run_qrec,qrun,run_y,ytypes=['milca','nilc'],mtypes=[0,
         'mfmin':1, \
         'mfmax':kwargs_cmb['snmax'], \
         'rdmin':1, \
-        'rdmax':kwargs_cmb['snmax'] \
+        'rdmax':kwargs_cmb['snmax'], \
+        'qlist':['TT'], \
+        'rd4sim':False \
     }
 
+    if kwargs_cmb['dtype'] == 'dr2_nilc':
+        eps = 1e-6
+        itns = 1000
+    else:
+        eps = 1e-5
+        itns = 100
+        
     kwargs_cinv = {\
         'chn':1, \
         'nsides' : [1024], \
         'lmaxs'  : [2048], \
-        'eps'    : [1e-5], \
-        'itns'   : [100] \
+        'eps'    : [eps], \
+        'itns'   : [itns] \
     }
 
     # Main calculation
@@ -51,18 +60,28 @@ def analysis_flow(run_cmb,run_qrec,qrun,run_y,ytypes=['milca','nilc'],mtypes=[0,
 
 #run_cmb = ['ptsr','alm','aps']
 #run_cmb = ['tausim','alm','aps']
-run_cmb = ['alm','aps']
-#run_cmb = []
+#run_cmb = ['alm','aps']
+run_cmb = []
+#run_cmb = ['alm']
+#run_cmb = ['aps']
 
 qrun = ['norm','qrec','n0','mean','aps']
+#qrun = ['norm','qrec','n0','mean','rdn0','aps']
+#qrun = ['norm','rdn0','aps']
+#qrun = ['aps']
+#qrun = ['rdn0']
 
-run_qrec = ['len','tau','src','tbh','tBH']
+#run_qrec = ['len','tau','src','tbh','tBH']
+#run_qrec = ['tBH']
+run_qrec = ['tau','tbh','tBH']
+#run_qrec = ['tau','tbh']
 #run_qrec = []
 
 #run_y = ['yalm']
 #run_y = ['yalm','tauxy','tbhxy','tBHxy']
-run_y = ['tauxy','tbhxy','tBHxy']
-#run_y = []
+#run_y = ['tauxy','tbhxy','tBHxy']
+#run_y = ['tbhxy','tBHxy']
+run_y = []
 
 kwargs_ov   = {\
     'overwrite':True, \
@@ -73,10 +92,13 @@ kwargs_ov   = {\
 kwargs_cmb  = {\
     'snmin':0, \
     'snmax':100, \
+    'dtype':'dr2_nilc', \
     #'dtype':'dr2_smica', \
-    'dtype':'dr3_nosz', \
+    #'dtype':'dr3_nosz', \
     #'wtype':'Lmask', \
-    'wtype':'LmaskDR3', \
+    #'wtype':'G60Lmask', \
+    #'wtype':'LmaskDR3', \
+    'wtype':'LmaskN18', \
     'ascale':1., \
     'lmax':2048, \
     'fltr':'cinv', \
@@ -85,5 +107,4 @@ kwargs_cmb  = {\
 }
 
 analysis_flow(run_cmb,run_qrec,qrun,run_y,kwargs_ov=kwargs_ov,kwargs_cmb=kwargs_cmb)
-
 
