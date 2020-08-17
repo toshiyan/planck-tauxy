@@ -89,10 +89,10 @@ def init_compy(ids,**kwargs):
 
 
 
-def init_cross(qobj,cy,ids,stag,q='TT'):
+def init_cross(qobj,cy,ids,stag,q='TT',est='bh-lens-src'):
 
     ltag = '_l'+str(qobj.rlmin)+'-'+str(qobj.rlmax)
-    xobj = xspec(q+'_'+qobj.qtype+'_'+stag+ltag,cy.ytag,ids)
+    xobj = xspec( '_'.join(filter(None,[q,qobj.qtype,est,stag])) + ltag,cy.ytag, ids )
     return xobj
 
 
@@ -202,20 +202,15 @@ def interface(run=['yalm','tauxy'],kwargs_ov={},kwargs_cmb={},kwargs_qrec={},kwa
         ymap2yalm(cy,Wy,p.rlz,p.lmax,w2,p.ftalm,**kwargs_ov)
 
     if 'tauxy' in run:
-        fxtau = init_cross(qtau,cy,p.ids,p.stag)
+        fxtau = init_cross(qtau,cy,p.ids,p.stag,est='')
         quadxy(cy,qtau.olmax,p.rlz,qtau,fxtau,w3,w2,**kwargs_ov)
 
     if 'tbhxy' in run:
-        fxtbh = init_cross(qtbh,cy,p.ids,'bh_'+p.stag)
+        fxtbh = init_cross(qtbh,cy,p.ids,p.stag,est='bh-lens')
         quadxy(cy,qtbh.olmax,p.rlz,qtbh,fxtbh,w3,w2,**kwargs_ov)
 
     if 'tBHxy' in run:
-        fxtBH = init_cross(qtBH,cy,p.ids,'BH_'+p.stag)
+        fxtBH = init_cross(qtBH,cy,p.ids,p.stag,est='bh-lens-src')
         quadxy(cy,qtBH.olmax,p.rlz,qtBH,fxtBH,w3,w2,**kwargs_ov)
-
-    #if 'kapxy' in run:
-
-    #    fxlen, fxlbh = init_cross(qlen,qlbh,cy,p.ids,p.stag)
-    #    quadxy(cy,qlen.olmax,p.rlz,qlen,fxlen,w3,w2)
 
 

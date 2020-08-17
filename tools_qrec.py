@@ -16,23 +16,22 @@ import misctools
 import prjlib
 
 
-def init_quad(ids,stag,**kwargs):
+def init_quad(ids,stag,rlz=[],**kwargs):
     
     # setup parameters for lensing reconstruction (see cmblensplus/utils/quad_func.py)
-
-    qtau = quad_func.quad(qlist=['TT'],qtype='tau',**kwargs)
-    qlen = quad_func.quad(qlist=['TT'],qtype='lens',**kwargs)
-    qsrc = quad_func.quad(qlist=['TT'],qtype='src',**kwargs)
-    qtbh = quad_func.quad(qlist=['TT'],qtype='tau',**kwargs)
-    qtBH = quad_func.quad(qlist=['TT'],qtype='tau',**kwargs)
+    qtau = quad_func.quad(rlz=rlz,qtype='tau',**kwargs)
+    qlen = quad_func.quad(rlz=rlz,qtype='lens',**kwargs)
+    qsrc = quad_func.quad(rlz=rlz,qtype='src',**kwargs)
+    qtbh = quad_func.quad(rlz=rlz,qtype='tau',bhe=['lens'],**kwargs)
+    qtBH = quad_func.quad(rlz=rlz,qtype='tau',bhe=['lens','src'],**kwargs)
 
     d = prjlib.data_directory()
 
-    quad_func.quad.fname(qtau,d['root'],ids,stag)
-    quad_func.quad.fname(qlen,d['root'],ids,stag)
-    quad_func.quad.fname(qsrc,d['root'],ids,stag)
-    quad_func.quad.fname(qtbh,d['root'],ids,'bh_'+stag)
-    quad_func.quad.fname(qtBH,d['root'],ids,'BH_'+stag)
+    qtau.fname(d['root'],ids,stag)
+    qlen.fname(d['root'],ids,stag)
+    qsrc.fname(d['root'],ids,stag)
+    qtbh.fname(d['root'],ids,stag)
+    qtBH.fname(d['root'],ids,stag)
 
     return qtau, qlen, qsrc, qtbh, qtBH
 
@@ -40,6 +39,8 @@ def init_quad(ids,stag,**kwargs):
 
 def aps(rlz,qobj,fklm=None,q='TT',**kwargs_ov):
 
+    cl = np.zeros((len(rlz),3,qobj.olmax+1))
+    
     for i in tqdm.tqdm(rlz,ncols=100,desc='aps ('+qobj.qtype+')'):
         
         if misctools.check_path(qobj.f[q].cl[i],**kwargs_ov): continue
@@ -54,8 +55,7 @@ def aps(rlz,qobj,fklm=None,q='TT',**kwargs_ov):
             alm = -alm
         
         # auto spectrum
-        cl = np.zeros((3,qobj.olmax+1))
-        cl[0,:] = curvedsky.utils.alm2cl(qobj.olmax,alm)/qobj.wn[4]
+        cl[i,0,:] = curvedsky.utils.alm2cl(qobj.olmax,alm)/qobj.wn[4]
 
         if fklm is not None and i>0:
             # load input klm
@@ -67,11 +67,16 @@ def aps(rlz,qobj,fklm=None,q='TT',**kwargs_ov):
             if qobj.qtype == 'src':
                 iklm = 0.*alm
             # cross with input
-            cl[1,:] = curvedsky.utils.alm2cl(qobj.olmax,alm,iklm)/qobj.wn[2]
+            cl[i,1,:] = curvedsky.utils.alm2cl(qobj.olmax,alm,iklm)/qobj.wn[2]
             # input
-            cl[2,:] = curvedsky.utils.alm2cl(qobj.olmax,iklm)
+            cl[i,2,:] = curvedsky.utils.alm2cl(qobj.olmax,iklm)
 
-        np.savetxt(qobj.f[q].cl[i],np.concatenate((qobj.l[None,:],cl)).T)
+        np.savetxt(qobj.f[q].cl[i],np.concatenate((qobj.l[None,:],cl[i,:,:])).T)
+
+    # save to files
+    if rlz[-1] >= 2:
+        i0 = max(0,1-rlz[0])
+        np.savetxt(qobj.f[q].mcls,np.concatenate((qobj.l[None,:],np.average(cl[i0:,:,:],axis=0),np.std(cl[i0:,:,:],axis=0))).T)
 
 
 def qrec_bh_tau(qtau,qlen,qsrc,qtbh,rlz,q='TT',est=['lens','tau','src'],**kwargs_ov):
@@ -132,26 +137,28 @@ def interface(qrun=['norm','qrec','n0','mean'],run=['tau','len','tbh'],kwargs_ov
         wn[:] = wn[0]
 
     # define objects
-    qtau, qlen, qsrc, qtbh, qtBH = init_quad(p.ids,p.stag,wn=wn,lcl=p.lcl,ocl=ocl,ifl=ifl,falm=p.fcmb.alms['c'],**kwargs_qrec)
+    qtau, qlen, qsrc, qtbh, qtBH = init_quad(p.ids,p.stag,rlz=p.rlz,wn=wn,lcl=p.lcl,ocl=ocl,ifl=ifl,falm=p.fcmb.alms['c'],**kwargs_qrec,**kwargs_ov)
 
     # reconstruction
     if 'tau' in run:
-        quad_func.qrec_flow(qtau,p.rlz,run=qrun,**kwargs_ov)  #tau rec
+        qtau.qrec_flow(run=qrun)  #tau rec
         if 'aps' in qrun:  aps(p.rlz,qtau,fklm=p.ftalm,**kwargs_ov)
 
     if 'len' in run:
-        quad_func.qrec_flow(qlen,p.rlz,run=qrun,**kwargs_ov)  #lens rec
+        qlen.qrec_flow(run=qrun)  #lens rec
         if 'aps' in qrun:  aps(p.rlz,qlen,fklm=p.fiklm,**kwargs_ov)
 
     if 'src' in run:
-        quad_func.qrec_flow(qsrc,p.rlz,run=qrun,**kwargs_ov)  #src rec
+        qsrc.qrec_flow(run=qrun)  #src rec
         if 'aps' in qrun:  aps(p.rlz,qsrc,fklm=p.ftalm,**kwargs_ov)
 
     if 'tbh' in run:
-        qrec_bh_tau(qtau,qlen,qsrc,qtbh,p.rlz,est=['lens','tau'],**kwargs_ov)  #BHE for tau
+        qtbh.qrec_flow(run=qrun)
+        #qrec_bh_tau(qtau,qlen,qsrc,qtbh,p.rlz,est=['lens','tau'],**kwargs_ov)  #BHE for tau
         if 'aps' in qrun:  aps(p.rlz,qtbh,fklm=p.ftalm,**kwargs_ov)
 
     if 'tBH' in run:
-        qrec_bh_tau(qtau,qlen,qsrc,qtBH,p.rlz,est=['lens','tau','src'],**kwargs_ov)  #full BHE for tau
+        qtBH.qrec_flow(run=qrun)
+        #qrec_bh_tau(qtau,qlen,qsrc,qtBH,p.rlz,est=['lens','tau','src'],**kwargs_ov)  #full BHE for tau
         if 'aps' in qrun:  aps(p.rlz,qtBH,fklm=p.ftalm,**kwargs_ov)
 
