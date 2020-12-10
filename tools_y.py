@@ -13,6 +13,9 @@ import quad_func
 import misctools
 import cmb as CMB
 
+# from pylib
+import planck_filename as plf
+
 # local
 import prjlib
 import tools_qrec
@@ -42,17 +45,19 @@ class compy():  # compton y
     def filename(self,ids):
 
         d = prjlib.data_directory()
-        
-        # original mask file for ymap
-        self.fmask_org = d['ysz'] + 'pub/COM_CompMap_Compton-SZMap-masks_2048_R2.01.fits'
 
+        #//// public data ////#
+        # original mask file for ymap
+        self.fmask_org = plf.subd['pr2']['ysz'] + 'COM_CompMap_Compton-SZMap-masks_2048_R2.01.fits'
+
+        # ymap
+        self.fymap  = plf.subd['pr2']['ysz'] + self.ytype + '_ymaps.fits'
+
+        #//// reduced data ////#
         # reduced mask (multiplied ptsr mask and costheta mask)
         self.fmask  = d['ysz'] + 'pub/ymask.fits'
         self.famask = d['ysz'] + 'pub/ymask_a'+str(self.ascale)+'deg.fits'
         if self.ascale == 0.0:  self.famask = self.fmask
-
-        # ymap
-        self.fymap  = d['ysz'] + 'pub/COM_CompMap_YSZ_R2.01/'+self.ytype+'_ymaps.fits'
 
         # yalm
         ttag = ''
@@ -92,7 +97,9 @@ def init_compy(ids,**kwargs):
 def init_cross(qobj,cy,ids,stag,q='TT',est='bh-lens-src'):
 
     ltag = '_l'+str(qobj.rlmin)+'-'+str(qobj.rlmax)
-    xobj = xspec( '_'.join(filter(None,[q,qobj.qtype,est,stag])) + ltag,cy.ytag, ids )
+    #xobj = xspec( '_'.join(filter(None,[q,qobj.qtype,est,stag])) + ltag,cy.ytag, ids )
+    xobj = xspec( '_'.join(filter(None,[q,qobj.qtype,qobj.bhe_tag[1:],stag])) + ltag,cy.ytag, ids )
+    
     return xobj
 
 

@@ -62,7 +62,7 @@ def map2alm(lmax,fmap,falm,mask,ibl,dtype,scale=1.,tmap=None,**kwargs):
         alm = curvedsky.utils.hp_map2alm(nside,lmax,lmax,hpmap)
         alm *= ibl[:,None]
         # input signal amplitude modulation
-        alm = curvedsky.utils.mulwin(nside,lmax,lmax,alm,mask*np.exp(-tmap))
+        alm = curvedsky.utils.mulwin(alm,mask*np.exp(-tmap))
     
     # save to file
     pickle.dump((alm),open(falm,"wb"),protocol=pickle.HIGHEST_PROTOCOL)
@@ -140,15 +140,15 @@ def wiener_cinv_core(i,dtype,M,cl,bl,Nij,fmap,falm,sscale,nscale,ftalm,verbose=T
             talm = pickle.load(open(ftalm[i],"rb"))
             tmap = curvedsky.utils.hp_alm2map(nside,lmax,lmax,talm)
             alm = curvedsky.utils.hp_map2alm(nside,lmax,lmax,Ts) / bl[0,:,None]
-            alm = curvedsky.utils.mulwin(nside,lmax,lmax,alm,np.exp(-tmap)) # add tau effect
+            alm = curvedsky.utils.mulwin(alm,np.exp(-tmap)) # add tau effect
             Ts = M * curvedsky.utils.hp_alm2map(nside,lmax,lmax,alm*bl[0,:,None])
         
         # noise, ptsr
         Tn = M * reduc_map(dtype,fmap['n'][i],scale=nscale)
-        if 'nosz' in dtype:
-            Tp = 0.
-        else:
-            Tp = M * reduc_map(dtype,fmap['p'][i].replace('a0.0deg','a1.0deg'),TK=1.) # approximately use 1.0deg apodization case
+        #if 'nosz' in dtype:
+        #    Tp = 0.
+        #else:
+        Tp = M * reduc_map(dtype,fmap['p'][i].replace('a0.0deg','a1.0deg'),TK=1.) # approximately use 1.0deg apodization case
 
         T[0,0,:] = Ts + Tn + Tp
 

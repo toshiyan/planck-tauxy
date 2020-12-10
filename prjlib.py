@@ -16,14 +16,21 @@ import constants
 import quad_func
 import misctools
 
+# from pylib
+import planck_filename as plf
+
 
 def data_directory():
     
     direct = {}
 
     root = '/global/cscratch1/sd/toshiyan/plk/'
-    direct['dr2']  = '/project/projectdirs/cmb/data/planck2015/'
-    direct['dr3']  = '/project/projectdirs/cmb/data/planck2018/'
+    #root = '/global/u1/t/toshiyan/scratch/plk/'
+    #root = '/global/u1/t/toshiyan/scratch/plk_old/'
+    #direct['dr2']  = '/project/projectdirs/cmb/data/planck2015/'
+    #direct['dr3']  = '/project/projectdirs/cmb/data/planck2018/'
+    #direct['PR2L'] = '/global/cscratch1/sd/toshiyan/PR2/'
+    #direct['PR3L'] = '/global/cscratch1/sd/toshiyan/PR3/'
     direct['root'] = root
     direct['inp']  = root + 'input/'
     direct['win']  = root + 'mask/'
@@ -145,19 +152,24 @@ class analysis:
         self.fimap = {}
 
         # PLANCK DR2
+        if 'dr2' in self.dtype:
+            self.fimap = plf.load_iqu_filename(PR=2,freq=self.dtype.replace('dr2_',''))
+        if 'dr3' in self.dtype:
+            self.fimap = plf.load_iqu_filename(PR=3,freq=self.dtype.replace('dr3_',''))
+
+        '''
         if self.dtype in ['dr2_nilc','dr2_smicaffp8']:
             self.fimap['s']  = [PLK+'ffp8/compsep/mc_cmb/ffp8_'+self.dtype.replace('dr2_','')+'_int_cmb_mc_'+x+'_005a_2048.fits' for x in ids]
             self.fimap['n']  = [PLK+'ffp8/compsep/mc_noise/ffp8_'+self.dtype.replace('dr2_','')+'_int_noise_mc_'+x+'_005a_2048.fits' for x in ids]
-
         if self.dtype == 'dr2_smica':
             self.fimap['s']  = [PLK+'ffp8.1/compsep/dx11_v2_smica_int_cmb_new_mc_'+x+'_005a_2048.fits' for x in ids]
-            self.fimap['n']  = [PLK+'ffp8.1/compsep/dx11_v2_smica_int_noise_mc_'+x+'_005a_2048.fits' for x in ids]
-        
+            self.fimap['n']  = [PLK+'ffp8.1/compsep/dx11_v2_smica_int_noise_mc_'+x+'_005a_2048.fits' for x in ids]        
         if self.dtype == 'dr3_nosz':
-            PLK = d['dr2']
-            self.fimap['s']  = [PLK+'ffp8.1/compsep/dx11_v2_smica_int_cmb_new_mc_'+x+'_005a_2048.fits' for x in ids]
-            self.fimap['n']  = [d['nosz']+'noise_'+x+'.fits' for x in ids]
- 
+            #PLK = d['dr2']
+            #self.fimap['s']  = [PLK+'ffp8.1/compsep/dx11_v2_smica_int_cmb_new_mc_'+x+'_005a_2048.fits' for x in ids]
+            #self.fimap['n']  = [d['nosz']+'noise_'+x+'.fits' for x in ids]
+            self.fimap['s']  = [d['PR3L']+'cmb/sim/dx12_v3_smica_nosz_cmb_mc_'+x+'_raw.fits' for x in ids]
+            self.fimap['n']  = [d['PR3L']+'cmb/sim/dx12_v3_smica_nosz_noise_mc_'+x+'_raw.fits' for x in ids] 
         if self.dtype == 'dr2_smicahm': # smica half mission
             smap1 = [PLK+'ffp8.1/compsep/dx11_v2_smica_int_cmb_new_hm1_mc_'+x+'_005a_2048.fits' for x in ids]
             smap2 = [PLK+'ffp8.1/compsep/dx11_v2_smica_int_cmb_new_hm2_mc_'+x+'_005a_2048.fits' for x in ids]
@@ -165,36 +177,35 @@ class analysis:
             nmap2 = [PLK+'ffp8.1/compsep/dx11_v2_smica_int_noise_hm2_mc_'+x+'_005a_2048.fits' for x in ids]
             self.fimap['s'] = [smap1,smap2]
             self.fimap['n'] = [nmap1,nmap2]
-
         # replace 1st rlz to real data
         if self.dtype in ['dr2_nilc','dr2_smica']:
-            self.fimap['s'][0] = PLK+'pr2/cmbmaps/COM_CMB_IQU-'+self.dtype.replace('dr2_','')+'-field-Int_2048_R2.01_full.fits'
-        
+            self.fimap['s'][0] = PLK+'pr2/cmbmaps/COM_CMB_IQU-'+self.dtype.replace('dr2_','')+'-field-Int_2048_R2.01_full.fits'        
         if self.dtype == 'dr2_smicahm':
             self.fimap['s'][0][0] = PLK+'pr2/cmbmaps/COM_CMB_IQU-smica-field-Int_2048_R2.01_halfmission-1.fits'
             self.fimap['s'][0][1] = PLK+'pr2/cmbmaps/COM_CMB_IQU-smica-field-Int_2048_R2.01_halfmission-2.fits'
-        
         if self.dtype == 'dr2_smicaffp8': #same as dr2_smica
-            self.fimap['s'][0] = PLK+'pr2/cmbmaps/COM_CMB_IQU-smica-field-Int_2048_R2.01_full.fits'
-        
+            self.fimap['s'][0] = PLK+'pr2/cmbmaps/COM_CMB_IQU-smica-field-Int_2048_R2.01_full.fits'        
         if self.dtype == 'dr3_nosz':
             self.fimap['s'][0] = d['inp']+'COM_CMB_IQU-smica-nosz_2048_R3.00_full.fits'
+        '''
 
         # input klm realizations
-        self.fiklm = [ d['inp'] + 'sky_klms/sim_'+x[1:]+'_klm.fits' for x in ids ]
+        self.fiklm = [ plf.subd['pr2']['lens'] + 'sky_klms/sim_'+x[1:]+'_klm.fits' for x in ids ]
+
+        # input tlm realizations
         if self.tausig:
             self.ftalm = [ d['inp'] + 'sky_tlms/sim_tausig_'+x[1:]+'_tlm.fits' for x in ids ]
         else:
             self.ftalm = None
 
-        # PLANCK DR3
-        #if self.dtype in ['nilc','smica','nosz']:
-        #    self.fimap['s']  = [PLK+'ffp10/compsep/mc_cmb/ffp8_'+self.dtype+'_int_cmb_mc_'+x+'_005a_2048.fits' for x in ids]
-        #    self.fimap['n']  = [PLK+'ffp10/compsep/mc_noise/ffp8_'+self.dtype+'_int_noise_mc_'+x+'_005a_2048.fits' for x in ids]
-
         #//// base best-fit cls ////#
         # aps of Planck 2015 best fit cosmology
-        self.flcl = d['inp'] + 'COM_PowerSpect_CMB-base-plikHM-TT-lowTEB-minimum-theory_R2.02.txt'
+        self.flcl = plf.subd['pr2']['cosmo'] + 'COM_PowerSpect_CMB-base-plikHM-TT-lowTEB-minimum-theory_R2.02.txt'
+        
+        # for forecast
+        self.simcl = d['inp'] + 'forecast_cosmo2017_10K_acc3_lensedCls.dat'
+        self.simul = d['inp'] + 'forecast_cosmo2017_10K_acc3_scalCls.dat'
+        self.thocl = d['inp'] + 'forecast_tt_TH_R10.0_a0.0.dat'
 
         #//// Derived data filenames ////#
         # cmb map, alm and aps
@@ -205,21 +216,20 @@ class analysis:
         if self.dtype == 'dr3_nosz': 
             self.fbeam = d['bem'] + 'dr2_smica.dat'
 
-        # for nosz
-        if self.dtype == 'dr3_nosz':
-            self.fnseed  = [d['nosz']+'seed_'+x+'.fits' for x in ids]
-            self.fnosz_nl = d['nosz']+'noise_aps.dat'
-            self.fimap['p'] = [x for x in ids]
-
+        # extra gaussian random fields
+        #if self.dtype == 'dr3_nosz':
+            # for nosz noise
+        #    self.fnseed  = [d['nosz']+'seed_'+x+'.fits' for x in ids]
+        #    self.fnosz_nl = d['nosz']+'noise_aps.dat'
+        #    self.fimap['p'] = [x for x in ids]
+        #else:
         # ptsr seed
-        else:
-            ptag = self.wtype+'_a'+str(self.ascale)+'deg'
-            self.fpseed  = [d['ptsr']+x+'.fits' for x in ids]
-            self.fptsrcl = d['ptsr']+'ptsr_'+ptag+'.dat'
-            self.fimap['p'] = [d['ptsr']+'ptsr_'+ptag+'_'+x+'.fits' for x in ids]
+        self.fpseed  = [d['ptsr']+x+'.fits' for x in ids]
+        ptag = self.wtype+'_a'+str(self.ascale)+'deg'
+        self.fptsrcl = d['ptsr']+'ptsr_'+ptag+'.dat'
+        self.fimap['p'] = [d['ptsr']+'ptsr_'+ptag+'_'+x+'.fits' for x in ids]
 
 
-            
     def set_mask_filename(self):
         
         d = data_directory()
@@ -231,7 +241,7 @@ class analysis:
         # set mask filename
         if   self.wtype == 'Fullsky':
             self.fmask = ''
-        elif self.wtype == 'Lmask':
+        elif self.wtype in ['Lmask','LmaskN18']:
             self.fmask = dwin + 'COM_Mask_Lensing_2048_R2.00.fits'
         elif self.wtype == 'LmaskDR3':
             self.fmask = dwin + 'COM_Mask_Lensing_2048_R3.00.fits'
@@ -244,6 +254,8 @@ class analysis:
         
         # apodized map
         self.famask = self.fmask.replace('.fits','_a'+str(self.ascale)+'deg.fits')
+        if self.wtype == 'LmaskN18':
+            self.famask = self.famask.replace('.fits','_N18.fits')
         
         # set original file
         if self.ascale==0.:  self.famask = self.fmask
@@ -321,5 +333,49 @@ def make_HMLmask(p,overwrite=False):
 def tau_spec(lmax,Lc=2000.):
     l = np.linspace(0,lmax,lmax+1)
     return  (1e-3)*4.*np.pi/Lc**2*np.exp(-(l/Lc)**2)
+
+
+def cl_opt_binning(OL,WL,bp):  # binning of power spectrum
+    bn = np.size(bp) - 1
+    bc = (bp[1:]+bp[:-1])*.5
+    cb = np.zeros(bn)
+    for i in range(bn):
+        b0 = int(bp[i])
+        b1 = int(bp[i+1])
+        if i==0: print(b0,b1,OL[b0])
+        cl = OL[b0:b1]
+        wl = 1./WL[b0:b1]**2
+        N0 = np.count_nonzero(wl)
+        if N0==b1-b0:
+            norm = 1./np.sum(wl)
+            cb[i] = norm*np.sum(wl*cl)
+        elif N0<b1-b0 and N0>0:
+            norm = 1./np.sum(wl[wl!=0])
+            cb[i] = norm*np.sum(wl[wl!=0]*cl[wl!=0])
+        else:
+            cb[i] = 0
+    return bc, cb
+
+
+def load_binned_tt(mb,qobj,rlz):
+    
+    import binning as bn
+
+    # optimal filter
+    al = (np.loadtxt(qobj.f['TT'].al)).T[1]
+    vl = al/np.sqrt(qobj.l+1e-30)
+    # binned spectra
+    mtt, __, stt, ott = bn.binned_spec(mb,qobj.f['TT'].cl,cn=1,doreal=True,opt=True,vl=vl)
+    # noise bias
+    nb = bn.binning( (np.loadtxt(qobj.f['TT'].n0bs)).T[1], mb, vl=vl )
+    rd = np.array( [ (np.loadtxt(qobj.f['TT'].rdn0[i])).T[1] for i in rlz ] )
+    rb = bn.binning(rd,mb,vl=vl)
+    # debias
+    ott = ott - rb[0] - nb/(qobj.mfsim)
+    mtt = mtt - np.mean(rb[1:,:],axis=0) - nb/(qobj.mfsim-1)
+    ott = ott - mtt # subtract average of sim
+    stt = stt - rb[1:,:] - nb/(qobj.mfsim-1)
+    vtt = np.std(stt,axis=0)
+    return ott, mtt, stt, vtt
 
 

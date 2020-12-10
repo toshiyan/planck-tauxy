@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import cosmology as cosmo, basic, tqdm
+import cosmology as cosmo, basic, tqdm, numpy as np
 from scipy.integrate import quad, dblquad
 from scipy.interpolate import InterpolatedUnivariateSpline as spline
 
@@ -70,7 +70,7 @@ def xe_asym(z,alpha=6.,zend=6.):
 cps = {'H0':67.5,'Om':.31,'Ov':.69,'w0':-1.,'wa':0.}
 Obh2 = .0223
 bias = 6.
-R0 = 10.
+R0 = 5.
 model = 'TH'
 alpha = 0.
 
@@ -119,16 +119,6 @@ for i, L in enumerate(tqdm.tqdm(l)):
     cl[0,i] = quad(I0,0.,100.)[0]
     cl[1,i] = quad(I1,0.,100.)[0]
 
-np.savetxt('../data/other/tt_'+model+'_R'+str(R0)+'_a'+str(alpha)+'.dat',np.concatenate((l[None,:],cl)).T)
+np.savetxt('../data/plk/input/forecast_tt_'+model+'_R'+str(R0)+'_a'+str(alpha)+'.dat',np.concatenate((l[None,:],cl)).T)
 
-
-xlim(1,3000)
-ylim(1e-13,1e-9)
-xscale('log')
-yscale('log')
-plot(l,l**2*cl[0,:]/2/np.pi*1e-6)
-
-
-xlim(1,3000)
-plot(l,1e7*cl[0,:])
 

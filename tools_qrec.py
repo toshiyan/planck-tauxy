@@ -18,20 +18,20 @@ import prjlib
 
 def init_quad(ids,stag,rlz=[],**kwargs):
     
-    # setup parameters for lensing reconstruction (see cmblensplus/utils/quad_func.py)
-    qtau = quad_func.quad(rlz=rlz,qtype='tau',**kwargs)
-    qlen = quad_func.quad(rlz=rlz,qtype='lens',**kwargs)
-    qsrc = quad_func.quad(rlz=rlz,qtype='src',**kwargs)
-    qtbh = quad_func.quad(rlz=rlz,qtype='tau',bhe=['lens'],**kwargs)
-    qtBH = quad_func.quad(rlz=rlz,qtype='tau',bhe=['lens','src'],**kwargs)
-
     d = prjlib.data_directory()
+    # setup parameters for lensing reconstruction (see cmblensplus/utils/quad_func.py)
+    qtau = quad_func.quad(rlz=rlz,stag=stag,root=d['root'],ids=ids,qtype='tau',**kwargs)
+    qlen = quad_func.quad(rlz=rlz,stag=stag,root=d['root'],ids=ids,qtype='lens',**kwargs)
+    qsrc = quad_func.quad(rlz=rlz,stag=stag,root=d['root'],ids=ids,qtype='src',**kwargs)
+    qtbh = quad_func.quad(rlz=rlz,stag=stag,root=d['root'],ids=ids,qtype='tau',bhe=['lens'],**kwargs)
+    qtBH = quad_func.quad(rlz=rlz,stag=stag,root=d['root'],ids=ids,qtype='tau',bhe=['lens','src'],**kwargs)
 
-    qtau.fname(d['root'],ids,stag)
-    qlen.fname(d['root'],ids,stag)
-    qsrc.fname(d['root'],ids,stag)
-    qtbh.fname(d['root'],ids,stag)
-    qtBH.fname(d['root'],ids,stag)
+
+    #qtau.fname(d['root'],ids,stag)
+    #qlen.fname(d['root'],ids,stag)
+    #qsrc.fname(d['root'],ids,stag)
+    #qtbh.fname(d['root'],ids,stag)
+    #qtBH.fname(d['root'],ids,stag)
 
     return qtau, qlen, qsrc, qtbh, qtBH
 
@@ -61,7 +61,7 @@ def aps(rlz,qobj,fklm=None,q='TT',**kwargs_ov):
             # load input klm
             if qobj.qtype == 'lens':
                 iKlm = hp.fitsfunc.read_alm(fklm[i])
-                iklm = curvedsky.utils.lm_healpy2healpix(len(iKlm),iKlm,2048)        
+                iklm = curvedsky.utils.lm_healpy2healpix(iKlm,2048)        
             if qobj.qtype == 'tau':
                 iklm = pickle.load(open(fklm[i],"rb"))
             if qobj.qtype == 'src':
