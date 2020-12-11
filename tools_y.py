@@ -55,8 +55,8 @@ class compy():  # compton y
 
         #//// reduced data ////#
         # reduced mask (multiplied ptsr mask and costheta mask)
-        self.fmask  = d['ysz'] + 'pub/ymask.fits'
-        self.famask = d['ysz'] + 'pub/ymask_a'+str(self.ascale)+'deg.fits'
+        self.fmask  = d['win'] + 'ymask.fits'
+        self.famask = d['win'] + 'ymask_a'+str(self.ascale)+'deg.fits'
         if self.ascale == 0.0:  self.famask = self.fmask
 
         # yalm
@@ -97,7 +97,6 @@ def init_compy(ids,**kwargs):
 def init_cross(qobj,cy,ids,stag,q='TT',est='bh-lens-src'):
 
     ltag = '_l'+str(qobj.rlmin)+'-'+str(qobj.rlmax)
-    #xobj = xspec( '_'.join(filter(None,[q,qobj.qtype,est,stag])) + ltag,cy.ytag, ids )
     xobj = xspec( '_'.join(filter(None,[q,qobj.qtype,qobj.bhe_tag[1:],stag])) + ltag,cy.ytag, ids )
     
     return xobj

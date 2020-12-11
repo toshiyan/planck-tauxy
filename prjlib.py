@@ -147,11 +147,7 @@ class analysis:
         ids = self.ids
 
         #//// Input public maps ////#
-        # sim
-        PLK = d[self.dtype[:3]]
-        self.fimap = {}
-
-        # PLANCK DR2
+        # PLANCK data and sim
         if 'dr2' in self.dtype:
             self.fimap = plf.load_iqu_filename(PR=2,freq=self.dtype.replace('dr2_',''))
         if 'dr3' in self.dtype:

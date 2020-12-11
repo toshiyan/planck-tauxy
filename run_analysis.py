@@ -58,25 +58,26 @@ def analysis_flow(run_cmb,run_qrec,qrun,run_y,ytypes=['milca','nilc'],mtypes=[0,
 
 
 
-run_cmb = ['ptsr','alm','aps']
+#run_cmb = ['ptsr','alm','aps']
 #run_cmb = ['tausim','alm','aps']
 #run_cmb = ['alm','aps']
-#run_cmb = []
+run_cmb = []
 
 qrun = ['norm','qrec','n0','mean','aps']
 #qrun = ['norm','qrec','n0','mean','rdn0','aps']
 #qrun = ['aps']
 
 #run_qrec = ['len','tau','src','tbh','tBH']
-run_qrec = ['tau','tbh','tBH']
-#run_qrec = ['tau','tbh']
+#run_qrec = ['tau','tbh','tBH']
+run_qrec = ['tbh','tBH']
 #run_qrec = ['tBH']
 #run_qrec = []
 
 #run_y = ['yalm']
 #run_y = ['yalm','tauxy','tbhxy','tBHxy']
-run_y = ['tauxy','tbhxy','tBHxy']
-#run_y = ['tBHxy']
+#run_y = ['tauxy','tbhxy','tBHxy']
+run_y = ['tbhxy','tBHxy']
+#run_y = ['tauxy']
 #run_y = []
 
 kwargs_ov   = {\

@@ -145,9 +145,6 @@ def wiener_cinv_core(i,dtype,M,cl,bl,Nij,fmap,falm,sscale,nscale,ftalm,verbose=T
         
         # noise, ptsr
         Tn = M * reduc_map(dtype,fmap['n'][i],scale=nscale)
-        #if 'nosz' in dtype:
-        #    Tp = 0.
-        #else:
         Tp = M * reduc_map(dtype,fmap['p'][i].replace('a0.0deg','a1.0deg'),TK=1.) # approximately use 1.0deg apodization case
 
         T[0,0,:] = Ts + Tn + Tp
@@ -248,7 +245,7 @@ def gen_ptsr(rlz,fcmb,fbeam,fseed,fcl,fmap,w,olmax=2048,ilmin=1000,ilmax=3000,ov
         
         if i==0: continue
         
-        palm = pickle.load(open(fseed[i],"rb"))
+        palm = pickle.load(open(fseed[i],"rb"))[:ilmax+1,:ilmax+1]
         palm *= dcl[:,None]*bl[:,None] #multiply beam-convolved cl
         pmap = curvedsky.utils.hp_alm2map(nside,ilmax,ilmax,palm)
         hp.fitsfunc.write_map(fmap['p'][i],pmap,overwrite=True)
@@ -257,43 +254,7 @@ def gen_ptsr(rlz,fcmb,fbeam,fseed,fcl,fmap,w,olmax=2048,ilmin=1000,ilmax=3000,ov
         palm /= bl[:olmax+1,None]  #beam deconvolution
         pickle.dump((palm),open(fcmb.alms['p']['T'][i],"wb"),protocol=pickle.HIGHEST_PROTOCOL)
 
-        
-def gen_nosz_noise(rlz,fcmb,fbeam,fnseed,fnl,fimap,lmax,TK=2.726,lmin=800,overwrite=False,verbose=True):
 
-    rcl = (np.loadtxt(fcmb.ocl)).T[1]
-    scl = (np.loadtxt(fcmb.scl)).T[1]
-    lmax = len(rcl) - 1
-
-    # interpolate
-    dCL = rcl - scl
-    dcl = sp.savgol_filter(dCL, 101, 1)
-    dcl[dcl<=0] = 1e-30
-    dcl[:lmin]  = 1e-30
-    np.savetxt(fnl,np.array((np.linspace(0,lmax,lmax+1),dcl,dCL)).T)
-    dcl = np.sqrt(dcl)
-    
-    # generating seed, only for the first run
-    for i in rlz:
-        if not os.path.exists(fnseed[i]):
-            alm = curvedsky.utils.gauss1alm(lmax,np.ones(lmax+1))
-            pickle.dump((alm),open(fnseed[i],"wb"),protocol=pickle.HIGHEST_PROTOCOL)
-
-    # load beam function
-    bl = np.loadtxt(fbeam)[:lmax+1]
-    nside = 2048
-    
-    # multiply cl, transform to map and save it
-    for i in tqdm.tqdm(rlz,ncols=100,desc='gen noise for nosz:'):
-
-        if misctools.check_path(fcmb.alms['n']['T'][i],overwrite=overwrite,verbose=verbose): continue
-
-        if i==0: continue
-
-        nalm = pickle.load(open(fnseed[i],"rb"))
-        nalm *= dcl[:,None]*bl[:,None] #multiply beam-convolved cl
-        nmap = curvedsky.utils.hp_alm2map(nside,lmax,lmax,nalm) * TK
-        hp.fitsfunc.write_map(fimap['n'][i],nmap,overwrite=True)
-    
 
 def interface(run=[],kwargs_cmb={},kwargs_ov={},kwargs_cinv={}):
 
@@ -313,9 +274,11 @@ def interface(run=[],kwargs_cmb={},kwargs_ov={},kwargs_cinv={}):
         gen_tau(p.rlz,p.lmax,p.ftalm,**kwargs_ov)
     
     # generate ptsr
-    if 'ptsr' in run and not p.tausig and p.dtype!='dr3_nosz':
-        if p.dtype=='dr2_nilc':  ilmin, ilmax = 400, 3000
-        if p.dtype=='dr2_smica': ilmin, ilmax = 1000, p.lmax
+    if 'ptsr' in run and not p.tausig:
+        if p.dtype=='dr2_nilc':  
+            ilmin, ilmax = 400, 3000
+        else: 
+            ilmin, ilmax = 1000, p.lmax
         # compute signal and noise spectra but need to change file names
         q = prjlib.init_analysis(**kwargs_cmb)
         q.fcmb.scl = q.fcmb.scl.replace('.dat','_tmp.dat')
@@ -327,31 +290,17 @@ def interface(run=[],kwargs_cmb={},kwargs_ov={},kwargs_cinv={}):
         # generate ptsr alm from obs - (sig+noi) spectrum
         gen_ptsr(p.rlz,q.fcmb,p.fbeam,p.fpseed,p.fptsrcl,p.fimap,w,olmax=p.lmax,ilmin=ilmin,ilmax=ilmax,**kwargs_ov) # generate map and alm from above computed aps
 
-    # noise for nosz
-    if 'ptsr' in run and p.dtype=='dr3_nosz': 
-        # no-SZ simulation assumes signal + noise where signal is taken from smica DR2
-        map2alm_all(p.rlz,p.lmax,p.fimap,p.fcmb.alms,w,p.fbeam,p.dtype,p.sscale,p.nscale,stype=['s'],**kwargs_ov)
-        q = prjlib.init_analysis(**kwargs_cmb)
-        q.fcmb.scl = q.fcmb.scl.replace('.dat','_tmp.dat')
-        q.fcmb.ocl = q.fcmb.ocl.replace('.dat','_tmp.dat')
-        alm2aps(p.rlz,p.lmax,q.fcmb,wn[2],stype=['s'],**kwargs_ov)
-        gen_nosz_noise(p.rlz,q.fcmb,p.fbeam,p.fnseed,p.fnosz_nl,p.fimap,p.lmax,**kwargs_ov)
-
 
     # use normal transform to alm
     if p.fltr == 'none':
         
-        if p.dtype == 'dr3_nosz':
-            stypes = ['s','n','c']
-        else:
-            stypes = ['s','n','p','c']
+        stypes = ['s','n','p','c']
     
         if 'alm' in run:  # combine signal, noise and ptsr
             if p.tausig:
                 # modify signal alm to include tau effect
                 map2alm_all(p.rlz,p.lmax,p.fimap,p.fcmb.alms,w,p.fbeam,p.dtype,p.sscale,p.nscale,ftalm=p.ftalm,**kwargs_ov)
             # convert map to alm
-            #if p.dtype == 'dr3_nosz':
             map2alm_all(p.rlz,p.lmax,p.fimap,p.fcmb.alms,w,p.fbeam,p.dtype,p.sscale,p.nscale,**kwargs_ov)
             # combine signal, noise and ptsr alms
             alm_comb(p.rlz,p.fcmb.alms,stype=stypes,**kwargs_ov)
