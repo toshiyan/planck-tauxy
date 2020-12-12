@@ -68,15 +68,15 @@ qrun = ['norm','qrec','n0','mean','aps']
 #qrun = ['aps']
 
 #run_qrec = ['len','tau','src','tbh','tBH']
-#run_qrec = ['tau','tbh','tBH']
-run_qrec = ['tbh','tBH']
+run_qrec = ['tau','tbh','tBH']
+#run_qrec = ['tbh','tBH']
 #run_qrec = ['tBH']
 #run_qrec = []
 
 #run_y = ['yalm']
 #run_y = ['yalm','tauxy','tbhxy','tBHxy']
-#run_y = ['tauxy','tbhxy','tBHxy']
-run_y = ['tbhxy','tBHxy']
+run_y = ['tauxy','tbhxy','tBHxy']
+#run_y = ['tbhxy','tBHxy']
 #run_y = ['tauxy']
 #run_y = []
 
@@ -98,8 +98,8 @@ kwargs_cmb  = {\
     #'wtype':'LmaskN18', \
     'ascale':1., \
     'lmax':2048, \
-    #'fltr':'cinv', \
-    'fltr':'none', \
+    'fltr':'cinv', \
+    #'fltr':'none', \
     'tausig': False\
 }
 

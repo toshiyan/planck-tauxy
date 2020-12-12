@@ -32,14 +32,15 @@ def jobfile(tag,r0,r1,**kwargs):
 
 
 rlz0 = np.arange(0,120,10)
+rlz0 = np.arange(10,120,10)
 rlz1 = rlz0[1:]-1
 rlz1[-1] = 100
 
 for r0, r1 in zip(rlz0,rlz1):
     print(r0,r1)
-    jobfile('base_rlz_'+str(r0)+'-'+str(r1),r0,r1,dtype='dr2_smica',wtype='Lmask')
-    jobfile('G60L_rlz_'+str(r0)+'-'+str(r1),r0,r1,dtype='dr2_smica',wtype='G60Lmask')
-    jobfile('NILC_rlz_'+str(r0)+'-'+str(r1),r0,r1,dtype='dr2_nilc',wtype='Lmask')
+    #jobfile('base_rlz_'+str(r0)+'-'+str(r1),r0,r1,dtype='dr2_smica',wtype='Lmask')
+    #jobfile('G60L_rlz_'+str(r0)+'-'+str(r1),r0,r1,dtype='dr2_smica',wtype='G60Lmask')
+    #jobfile('NILC_rlz_'+str(r0)+'-'+str(r1),r0,r1,dtype='dr2_nilc',wtype='Lmask')
     jobfile('NoSZ_rlz_'+str(r0)+'-'+str(r1),r0,r1,dtype='dr3_nosz',wtype='LmaskDR3')
     #jobfile('TN18_rlz_'+str(r0)+'-'+str(r1),r0,r1,dtype='dr2_nilc',wtype='LmaskN18',fltr='none')
 
