@@ -81,7 +81,7 @@ pk0 /= (cps['H0']/100.)**3
 Pk = spline(k,pk0)
 
 
-zi = np.linspace(1e-4,20.,2000)
+zi = np.linspace(1e-4,100.,2000)
 Hzi = basic.cosmofuncs.hubble(zi,**cps)
 rzi = basic.cosmofuncs.dist_comoving(zi,**cps)
 Dzi = basic.cosmofuncs.growth_factor(zi,normed=True,**cps)
@@ -109,6 +109,7 @@ Rz = lambda z: R0*np.power(10.,alpha*(xe(z)-.5))
 if alpha==0.: 
     Rz = lambda z: R0
 
+'''
 for i, L in enumerate(tqdm.tqdm(l)):
     k  = lambda z: L/rz(z)
     Pm = lambda z: Dz(z)**2*Pk(k(z))
@@ -120,5 +121,24 @@ for i, L in enumerate(tqdm.tqdm(l)):
     cl[1,i] = quad(I1,0.,100.)[0]
 
 np.savetxt('../data/plk/input/forecast_tt_'+model+'_R'+str(R0)+'_a'+str(alpha)+'.dat',np.concatenate((l[None,:],cl)).T)
+'''    
 
+# each z contributions
+zbin = np.arange(5.,20.,1.)
+clz = np.zeros((np.size(l)))
+
+for zi, zb in enumerate(zbin):
+    
+    print(zb)
+    
+    for i, L in enumerate(tqdm.tqdm(l)):
+        k  = lambda z: L/rz(z)
+        Pm = lambda z: Dz(z)**2*Pk(k(z))
+        P1 = lambda z: xe(z) * (1-xe(z)) * ( Fk(k(z),Rz(z)) + Gk(k(z),Rz(z),Pm) )
+        P2 = lambda z: ( xHlogxH(xe(z))*bias*Ik(k(z),Rz(z)) - xe(z) )**2 * Pm(z)
+        I0 = lambda z: Kz(z)*(P1(z)+P2(z))
+        I1 = lambda z: Kz(z)*P1(z)
+        clz[i] = I0(zb)
+
+    np.savetxt('../data/other/tt_'+model+'_R'+str(R0)+'_a'+str(alpha)+'_z'+str(zb)+'.dat',np.array((l,clz)).T)
 
