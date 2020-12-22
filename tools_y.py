@@ -3,6 +3,7 @@ import numpy as np
 import healpy as hp
 import pickle
 import tqdm
+from scipy.signal import savgol_filter
 
 # from cmblensplus/wrap
 import curvedsky
@@ -12,6 +13,7 @@ import basic
 import quad_func
 import misctools
 import cmb as CMB
+import binning as bn
 
 # from pylib
 import planck_filename as plf
@@ -94,7 +96,7 @@ def init_compy(ids,**kwargs):
 
 
 
-def init_cross(qobj,cy,ids,stag,q='TT',est='bh-lens-src'):
+def init_cross(qobj,cy,ids,stag,q='TT'):
 
     ltag = '_l'+str(qobj.rlmin)+'-'+str(qobj.rlmax)
     xobj = xspec( '_'.join(filter(None,[q,qobj.qtype,qobj.bhe_tag[1:],stag])) + ltag,cy.ytag, ids )
@@ -181,6 +183,23 @@ def theta_mask(nside,theta):
     
     return mask
 
+
+def load_binned_ty(mb,dtype='dr2_smica',fltr='cinv',cmask='Lmask',mtype=0,ytype='nilc',bhe=['lens']):
+    
+    # load filenames
+    d = prjlib.data_directory()
+    p = prjlib.init_analysis(dtype=dtype,fltr=fltr,wtype=cmask)    
+    cy = init_compy(p.ids,masktype=mtype,ytype=ytype)
+    qobj = quad_func.quad(stag=p.stag,root=d['root'],ids=p.ids,qtype='tau',bhe=bhe,rlmin=100,rlmax=2048)
+    ftxy = init_cross(qobj,cy,p.ids,p.stag)
+
+    # optimal binning
+    yy = savgol_filter( (np.loadtxt(cy.fclyy)).T[1], 51, 3)
+    al = (np.loadtxt(qobj.f['TT'].al)).T[1]
+    vl = np.sqrt(al*yy)/np.sqrt(qobj.l+1e-30)
+    
+    # results
+    return bn.binned_spec(mb,ftxy.xl,cn=1,opt=True,vl=vl)
 
 
 def interface(run=['yalm','tauxy'],kwargs_ov={},kwargs_cmb={},kwargs_qrec={},kwargs_y={}):

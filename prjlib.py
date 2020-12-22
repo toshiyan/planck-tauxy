@@ -7,6 +7,7 @@ import sys
 import configparser
 import pickle
 
+
 # from cmblensplus/wrap/
 import curvedsky
 import basic
@@ -15,6 +16,7 @@ import basic
 import constants
 import quad_func
 import misctools
+import binning as bn
 
 # from pylib
 import planck_filename as plf
@@ -353,25 +355,6 @@ def cl_opt_binning(OL,WL,bp):  # binning of power spectrum
     return bc, cb
 
 
-def load_binned_tt(mb,qobj,rlz):
-    
-    import binning as bn
 
-    # optimal filter
-    al = (np.loadtxt(qobj.f['TT'].al)).T[1]
-    vl = al/np.sqrt(qobj.l+1e-30)
-    # binned spectra
-    mtt, __, stt, ott = bn.binned_spec(mb,qobj.f['TT'].cl,cn=1,doreal=True,opt=True,vl=vl)
-    # noise bias
-    nb = bn.binning( (np.loadtxt(qobj.f['TT'].n0bs)).T[1], mb, vl=vl )
-    rd = np.array( [ (np.loadtxt(qobj.f['TT'].rdn0[i])).T[1] for i in rlz ] )
-    rb = bn.binning(rd,mb,vl=vl)
-    # debias
-    ott = ott - rb[0] - nb/(qobj.mfsim)
-    mtt = mtt - np.mean(rb[1:,:],axis=0) - nb/(qobj.mfsim-1)
-    ott = ott - mtt # subtract average of sim
-    stt = stt - rb[1:,:] - nb/(qobj.mfsim-1)
-    vtt = np.std(stt,axis=0)
-    return ott, mtt, stt, vtt
 
 

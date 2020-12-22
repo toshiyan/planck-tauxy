@@ -7,6 +7,7 @@ import tqdm
 # from cmblensplus/wrap
 import curvedsky
 import basic
+import binning as bn
 
 # from cmblensplus/utils
 import quad_func
@@ -109,6 +110,38 @@ def qrec_bh_tau(qtau,qlen,qsrc,qtbh,rlz,q='TT',est=['lens','tau','src'],**kwargs
     quad_func.quad.mean_rlz(qtbh,rlz,**kwargs_ov)
 
 
+def load_binned_tt(mb,dtype='dr2_smica',fltr='cinv',cmask='Lmask',bhe=['lens'],snmax=100):
+    
+    # filename
+    d = prjlib.data_directory()
+    p = prjlib.init_analysis(snmax=snmax,dtype=dtype,fltr=fltr,wtype=cmask)
+    qobj = quad_func.quad(stag=p.stag,root=d['root'],ids=p.ids,qtype='tau',bhe=bhe,rlmin=100,rlmax=2048)
+
+    # optimal filter
+    al = (np.loadtxt(qobj.f['TT'].al)).T[1]
+    vl = al/np.sqrt(qobj.l+1e-30)
+    
+    # binned spectra
+    mtt, __, stt, ott = bn.binned_spec(mb,qobj.f['TT'].cl,cn=1,doreal=True,opt=True,vl=vl)
+    
+    # noise bias
+    nb = bn.binning( (np.loadtxt(qobj.f['TT'].n0bs)).T[1], mb, vl=vl )
+    rd = np.array( [ (np.loadtxt(qobj.f['TT'].rdn0[i])).T[1] for i in p.rlz ] )
+    rb = bn.binning(rd,mb,vl=vl)
+    
+    # debias
+    ott = ott - rb[0] - nb/(qobj.mfsim)
+    stt = stt - rb[1:,:] - nb/(qobj.mfsim-1)
+    
+    # sim mean and std
+    mtt = mtt - np.mean(rb[1:,:],axis=0) - nb/(qobj.mfsim-1)
+    vtt = np.std(stt,axis=0)
+    
+    # subtract average of sim
+    ott = ott - mtt 
+    
+    return mtt, vtt, stt, ott
+
 
 def interface(qrun=['norm','qrec','n0','mean'],run=['tau','len','tbh'],kwargs_ov={},kwargs_cmb={},kwargs_qrec={},ep=1e-30):
     
@@ -129,7 +162,7 @@ def interface(qrun=['norm','qrec','n0','mean'],run=['tau','len','tbh'],kwargs_ov
         Ql  = (p.lcl[0,:])**2/(wcl*cnl+ep**2)
         # T' = QT^f = Q/(cl+nl) * (T+n)/sqrt(Q)
 
-        ocl = cnl/(Ql+ep)  # corrected observed cl
+        ocl = cnl/(Ql+ep)  # corrected observed cl  = Fl
         ifl = p.lcl[0,:]/(Ql+ep)    # remove theory signal cl in wiener filter
         ocl = np.reshape(ocl,(1,p.lmax+1))
         ifl = np.reshape(ifl,(1,p.lmax+1))

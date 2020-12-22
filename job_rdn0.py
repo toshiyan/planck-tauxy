@@ -8,7 +8,7 @@ def create_runfile(f,r0,r1,dtype='dr2_smica',wtype='Lmask',fltr='cinv'):
     add("kwargs_ov = {'overwrite':True,'verbose':True}",f)
     add("kwargs_cmb = {'snmin':"+str(r0)+",'snmax':"+str(r1)+",'dtype':'"+dtype+"','wtype':'"+wtype+"','ascale':1.,'lmax':2048,'fltr':'"+fltr+"','tausig':False}",f)
     add("kwargs_qrec = {'rlmin':100,'rlmax':2048,'nside':1024,'n0min':1,'n0max':50,'rdmin':1,'rdmax':100,'qlist':['TT'],'rd4sim':True}",f)
-    add("tools_qrec.interface(qrun=['rdn0'],run=['tBH'],kwargs_ov=kwargs_ov,kwargs_cmb=kwargs_cmb,kwargs_qrec=kwargs_qrec)",f)
+    add("tools_qrec.interface(qrun=['rdn0'],run=['tbh'],kwargs_ov=kwargs_ov,kwargs_cmb=kwargs_cmb,kwargs_qrec=kwargs_qrec)",f)
     #add("tools_qrec.interface(qrun=['rdn0'],run=['tau','tbh','tBH'],kwargs_ov=kwargs_ov,kwargs_cmb=kwargs_cmb,kwargs_qrec=kwargs_qrec)",f)
 
 
@@ -32,7 +32,6 @@ def jobfile(tag,r0,r1,**kwargs):
 
 
 rlz0 = np.arange(0,120,10)
-rlz0 = np.arange(10,120,10)
 rlz1 = rlz0[1:]-1
 rlz1[-1] = 100
 
