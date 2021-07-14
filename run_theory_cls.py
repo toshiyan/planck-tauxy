@@ -9,9 +9,10 @@ cps = {'H0':67.5,'Om':.31,'Ov':.69,'w0':-1.,'wa':0.}
 Ob = .0455
 bias = 6.
 R0 = 5.
-#model = 'TH'
-model = 'AS'
+model = 'TH'
+#model = 'AS'
 alpha = 0.
+alpha = 2.
 ln = 100
 
 # define reionization history
