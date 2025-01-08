@@ -5,4 +5,8 @@ __trash__
 **/*.log
 **/*.exp
 **/*.pkl
+**/tmp_*
+data_aux
+data_local
+old
 
