@@ -26,13 +26,7 @@ def data_directory():
     
     direct = {}
 
-    root = '/global/cscratch1/sd/toshiyan/plk/'
-    #root = '/global/u1/t/toshiyan/scratch/plk/'
-    #root = '/global/u1/t/toshiyan/scratch/plk_old/'
-    #direct['dr2']  = '/project/projectdirs/cmb/data/planck2015/'
-    #direct['dr3']  = '/project/projectdirs/cmb/data/planck2018/'
-    #direct['PR2L'] = '/global/cscratch1/sd/toshiyan/PR2/'
-    #direct['PR3L'] = '/global/cscratch1/sd/toshiyan/PR3/'
+    root = '/global/cscratch1/sd/toshiyan/tauxy/'
     direct['root'] = root
     direct['inp']  = root + 'input/'
     direct['win']  = root + 'mask/'
